@@ -1,8 +1,8 @@
 # StackGAN_v2 will be released soon
 
-- [StackGAN_v1: Tensorflow implementation](https://github.com/hanzhanggit/StackGAN)
+- [StackGAN-v1: Tensorflow implementation](https://github.com/hanzhanggit/StackGAN)
 
-- [StackGAN_v1: Pytorch implementation](https://github.com/hanzhanggit/StackGAN-Pytorch)
+- [StackGAN-v1: Pytorch implementation](https://github.com/hanzhanggit/StackGAN-Pytorch)
 
 - [Inception score evaluation](https://github.com/hanzhanggit/StackGAN-inception-model)
 
