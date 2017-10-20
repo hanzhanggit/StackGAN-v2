@@ -1,4 +1,4 @@
-# StackGAN_v2 will be released soon
+# StackGAN-v2 will be released soon
 
 - [StackGAN-v1: Tensorflow implementation](https://github.com/hanzhanggit/StackGAN)
 
