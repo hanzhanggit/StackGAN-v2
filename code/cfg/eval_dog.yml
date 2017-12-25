@@ -1,0 +1,31 @@
+CONFIG_NAME: '3stages_color'
+
+DATASET_NAME: 'church_outdoor'  # cat, dog, bedroom, church_outdoor
+DATA_DIR: '../data/lsun'  # imagenet, lsun
+GPU_ID: '3'
+WORKERS: 4  # 4
+
+
+TREE:
+    BRANCH_NUM: 3
+
+TEST:
+    B_EXAMPLE: False  # True
+    SAMPLE_NUM: 100  # 30000
+
+TRAIN:
+    FLAG: False
+    NET_G: '../models/dog_3stages_color/netG_600000.pth'
+#    NET_G: '../models/cat_3stages_color/netG_200000.pth'
+#    NET_G: '../models/bedroom_3stages_color/netG_364000.pth'
+#    NET_G: '../models/church_outdoor_3stages_color/netG_270000.pth'
+    BATCH_SIZE: 24
+
+
+GAN:
+    EMBEDDING_DIM: 128
+    DF_DIM: 64
+    GF_DIM: 64
+    Z_DIM: 100
+    R_NUM: 2
+    B_CONDITION: False
