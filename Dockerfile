@@ -12,7 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
      rm -rf /var/lib/apt/lists/*
 
 
-RUN pip install http://download.pytorch.org/whl/cu90/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl 
+ENV PYTHON_VERSION=2.7
+RUN curl -o ~/miniconda.sh -O  https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh  && \
+     chmod +x ~/miniconda.sh && \
+     ~/miniconda.sh -b -p /opt/conda && \     
+     rm ~/miniconda.sh && \
+     /opt/conda/bin/conda create -y --name pytorch-py$PYTHON_VERSION python=$PYTHON_VERSION numpy pyyaml scipy ipython mkl&& \
+     /opt/conda/bin/conda clean -ya 
+
 RUN pip install torchvision 
 
 WORKDIR /workspace
@@ -22,4 +29,7 @@ RUN chmod -R a+w /workspace
 ENV PYTHONPATH /workspace
 
 COPY requirements.txt /workspace
-RUN pip install -r /workspace/requirements.txt
+RUN conda install pytorch torchvision cuda90 -c pytorch
+RUN conda install --yes --file /workspace/requirements.txt
+RUN while read requirement; do conda install --yes $requirement; done < requirements.txt 2>error.log
+
