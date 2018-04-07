@@ -19,7 +19,7 @@ python 2.7
 Pytorch
 
 In addition, please add the project folder to PYTHONPATH and `pip install` the following packages:
-- `tensorboard`
+- `tensorboard-pytorch`
 - `python-dateutil`
 - `easydict`
 - `pandas`
