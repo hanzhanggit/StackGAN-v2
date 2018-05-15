@@ -1,0 +1,17 @@
+# ##############################################################################
+# This is an Makefile where extra targets can be defined by users. If the file
+# exists beside the main `Makefile` it will be included after all other targets.
+# Users can define custom targets this way.
+#
+# NOTE: You do _not_ have to copy this file; if you don't need any extra targets,
+#       just ignore it! It is there to add user defined functionality to the
+#       default set.
+
+
+.PHONY: extra
+extra:
+	@echo "Extra target!"
+
+.PHONY: gputest
+gputest: $(TARGET_DONE_FILE_BUILD)
+	$(DOCKER_COMMAND_RUN) nvidia-smi 
