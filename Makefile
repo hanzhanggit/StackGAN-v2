@@ -192,7 +192,7 @@ CMD = /bin/bash
 HOSTNAME := $(shell hostname)
 
 # Command to execute to launch a Jupyter notebook
-JUPYTER_PORT=9999
+JUPYTER_PORT=9998
 JUPYTER_COMMAND = jupyter notebook \
     --no-browser \
     --ip=0.0.0.0 \
