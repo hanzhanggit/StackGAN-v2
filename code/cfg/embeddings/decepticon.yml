@@ -1,0 +1,9 @@
+n_layers: 2
+n_head: 2
+d_word_vec: 100
+d_model: 100
+d_inner_hid: 100
+d_k: 100
+d_v: 100
+dropout: 0.1
+proj_share_weight: True

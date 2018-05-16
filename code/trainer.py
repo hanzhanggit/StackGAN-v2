@@ -1,25 +1,30 @@
 from __future__ import print_function
 from six.moves import range
 
-import torch.backends.cudnn as cudnn
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
-import torch.optim as optim
-import torchvision.utils as vutils
-import numpy as np
+import yaml
 import os
 import time
-from PIL import Image, ImageFont, ImageDraw
+
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.utils as vutils
+
+
+from PIL import Image
 from copy import deepcopy
+from tensorboard import FileWriter
+from tensorboard import summary
+from torch.autograd import Variable
 
 from miscc.config import cfg
 from miscc.utils import mkdir_p
 
-from tensorboard import summary
-from tensorboard import FileWriter
 
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
+from embedding_models.registry import EmbedderStore, EmbeddingBlock
 
 
 # ################## Shared functions ###################
@@ -102,7 +107,7 @@ def negative_log_posterior_probability(predictions, num_splits=1):
     return np.mean(scores), np.std(scores)
 
 
-def load_network(gpus):
+def load_network(gpus, dictionary=None):
     netG = G_NET()
     netG.apply(weights_init)
     netG = torch.nn.DataParallel(netG, device_ids=gpus)
@@ -146,14 +151,33 @@ def load_network(gpus):
 
     inception_model = INCEPTION_V3()
 
+    # Loading embedding models
+    if cfg.TEXT_EMBEDDING_MODEL != '' and cfg.TEXT_EMBEDDING_MODEL_CFG != '':
+        with open(cfg.TEXT_EMBEDDING_MODEL_CFG, 'rt') as file_:
+            model_config = yaml.load(file_)
+            model_config['n_src_vocab'] = len(dictionary)
+        embedding_model = EmbedderStore.get_from_configs(cfg, model_config)
+    else:
+        embedding_model = EmbeddingBlock(cfg.TEXT.DIMENSION / cfg.TEXT.MAX_LEN, len(dictionary))
+
+    if cfg.STAGE1_E:
+        state_dict = torch.load(cfg.STAGE1_E, map_location=lambda storage, loc: storage)
+        embedding_model.load_state_dict(state_dict)
+        print('Load embedding model weights from: %s' % cfg.STAGE1_E)
+
+    for param in embedding_model.parameters():
+        param.requires_grad = False
+
     if cfg.CUDA:
         netG.cuda()
         for i in range(len(netsD)):
             netsD[i].cuda()
         inception_model = inception_model.cuda()
+        embedding_model.cuda()
+
     inception_model.eval()
 
-    return netG, netsD, len(netsD), inception_model, count
+    return netG, netsD, len(netsD), inception_model, embedding_model, count
 
 
 def define_optimizers(netG, netsD):
@@ -344,7 +368,7 @@ class GANTrainer(object):
 
     def train(self):
         self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, start_count = load_network(self.gpus)
+            self.inception_model, _, start_count = load_network(self.gpus)
         avg_param_G = copy_G_params(self.netG)
 
         self.optimizerG, self.optimizersD = \
@@ -546,13 +570,14 @@ class condGANTrainer(object):
         self.num_batches = len(self.data_loader)
 
     def prepare_data(self, data):
-        imgs, w_imgs, txts, _ = data
+        imgs, w_imgs, txt_ids, _ = data
 
         real_vimgs, wrong_vimgs = [], []
         if cfg.CUDA:
-            vembedding = Variable(t_embedding).cuda()
+            vids = Variable(txt_ids).cuda()
         else:
-            vembedding = Variable(t_embedding)
+            vids = Variable(txt_ids)
+
         for i in range(self.num_Ds):
             if cfg.CUDA:
                 real_vimgs.append(Variable(imgs[i]).cuda())
@@ -560,7 +585,8 @@ class condGANTrainer(object):
             else:
                 real_vimgs.append(Variable(imgs[i]))
                 wrong_vimgs.append(Variable(w_imgs[i]))
-        return imgs, real_vimgs, wrong_vimgs, vembedding
+
+        return imgs, real_vimgs, wrong_vimgs, vids
 
     def train_Dnet(self, idx, count):
         flag = count % 100
@@ -665,7 +691,7 @@ class condGANTrainer(object):
 
     def train(self):
         self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, start_count = load_network(self.gpus)
+            self.inception_model, self.netE, start_count = load_network(self.gpus, self.data_loader.data.dictionary)
         avg_param_G = copy_G_params(self.netG)
 
         self.optimizerG, self.optimizersD = \
@@ -705,8 +731,9 @@ class condGANTrainer(object):
                 # (0) Prepare training data
                 ######################################################
                 self.imgs_tcpu, self.real_imgs, self.wrong_imgs, \
-                    self.txt_embedding = self.prepare_data(data)
+                    self.txt_ids = self.prepare_data(data)
 
+                self.txt_embedding = self.embedding_model(self.txt_ids)
                 #######################################################
                 # (1) Generate fake images
                 ######################################################

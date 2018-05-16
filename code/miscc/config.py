@@ -10,8 +10,11 @@ __C = edict()
 cfg = __C
 
 # Dataset name: flowers, birds
-__C.DATASET_NAME = 'birds'
+__C.DATASET_NAME = 'ssense_256_256'
+__C.EXPERIMENT_NAME = 'fashion'
 __C.EMBEDDING_TYPE = 'cnn-rnn'
+__C.TEXT_EMBEDDING_MODEL = ''
+__C.TEXT_EMBEDDING_MODEL_CFG = ''
 __C.CONFIG_NAME = ''
 __C.DATA_DIR = ''
 
@@ -61,6 +64,8 @@ __C.GAN.B_CONDITION = False
 
 __C.TEXT = edict()
 __C.TEXT.DIMENSION = 1024
+__C.TEXT.VOCAB_PATH = ''
+__C.TEXT.MAX_LEN = 15
 
 
 def _merge_a_into_b(a, b):

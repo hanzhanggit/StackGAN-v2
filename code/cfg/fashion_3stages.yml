@@ -1,7 +1,11 @@
 CONFIG_NAME: '3stages'
 
+EXPERIMENT_NAME: 'bilstm_pretrained_big'
 DATASET_NAME: 'ssense_256_256'
-EMBEDDING_TYPE: 'cnn-rnn'
+
+TEXT_EMBEDDING_MODEL: 'bilstm'
+TEXT_EMBEDDING_MODEL_CFG: 'cfg/embeddings/bilstm_big.yml'
+
 DATA_DIR: '../data/birds'
 GPU_ID: '0'
 WORKERS: 4
@@ -34,3 +38,5 @@ GAN:
 
 TEXT:
     DIMENSION: 1024
+    VOCAB_PATH: '/data/fashion_final/vocab.txt'
+    MAX_LEN: 15
