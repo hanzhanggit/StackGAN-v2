@@ -17,6 +17,7 @@ __C.TEXT_EMBEDDING_MODEL = ''
 __C.TEXT_EMBEDDING_MODEL_CFG = ''
 __C.CONFIG_NAME = ''
 __C.DATA_DIR = ''
+__C.OUTPUT_DIR = '/output'
 
 __C.GPU_ID = '0'
 __C.CUDA = True

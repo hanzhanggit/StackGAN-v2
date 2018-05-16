@@ -6,7 +6,9 @@ DATASET_NAME: 'ssense_256_256'
 TEXT_EMBEDDING_MODEL: 'bilstm'
 TEXT_EMBEDDING_MODEL_CFG: 'cfg/embeddings/bilstm_big.yml'
 
-DATA_DIR: '../data/birds'
+DATA_DIR:   '/data/fashion_final'
+OUTPUT_DIR: '/output'
+
 GPU_ID: '0'
 WORKERS: 4
 

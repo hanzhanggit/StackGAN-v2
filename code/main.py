@@ -24,7 +24,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a GAN network')
     parser.add_argument('--cfg', dest='cfg_file',
                         help='optional config file',
-                        default='cfg/birds_proGAN.yml', type=str)
+                        default='cfg/fashion_3stages.yml', type=str)
     parser.add_argument('--gpu', dest='gpu_id', type=str, default='-1')
     parser.add_argument('--data_dir', dest='data_dir', type=str, default='')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
@@ -58,8 +58,10 @@ if __name__ == "__main__":
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = '../output/%s_%s_%s' % \
-        (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+
+    output_dir_root = cfg.OUTPUT_DIR if cfg.OUTPUT_DIR else '../output'
+    output_dir = '%s/%s_%s_%s' % \
+            (output_dir_root, cfg.EXPERIMENT_NAME, cfg.CONFIG_NAME, timestamp)
 
     split_dir, bshuffle = 'train', True
     if not cfg.TRAIN.FLAG:
