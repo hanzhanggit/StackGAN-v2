@@ -77,10 +77,13 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip()])
 
     if cfg.GAN.B_CONDITION:  # text to image task
-        from datasets import TextDataset
-        dataset = TextDataset(
+        from datasets import SsenseDataset, SplitType
+        dataset = SsenseDataset(
             cfg.DATA_DIR,
-            split_dir,
+            cfg.TEXT.VOCAB_PATH,
+            cfg.TEXT.MAX_LEN,
+            cfg.DATASET_NAME,
+            split_name=SplitType.train,
             base_size=cfg.TREE.BASE_SIZE,
             transform=image_transform)
     else:

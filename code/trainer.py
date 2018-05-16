@@ -12,11 +12,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.utils as vutils
 
+import embedding_models
 
 from PIL import Image
 from copy import deepcopy
-from tensorboard import FileWriter
-from tensorboard import summary
+from tensorboardX import FileWriter
+from tensorboardX import summary
 from torch.autograd import Variable
 
 from miscc.config import cfg
@@ -24,7 +25,7 @@ from miscc.utils import mkdir_p
 
 
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
-from embedding_models.registry import EmbedderStore, EmbeddingBlock
+from embedding_models.registry import EmbedderStore
 
 
 # ################## Shared functions ###################
@@ -158,7 +159,7 @@ def load_network(gpus, dictionary=None):
             model_config['n_src_vocab'] = len(dictionary)
         embedding_model = EmbedderStore.get_from_configs(cfg, model_config)
     else:
-        embedding_model = EmbeddingBlock(cfg.TEXT.DIMENSION / cfg.TEXT.MAX_LEN, len(dictionary))
+        embedding_model = embedding_models.EmbeddingBlock(cfg.TEXT.DIMENSION / cfg.TEXT.MAX_LEN, len(dictionary))
 
     if cfg.STAGE1_E:
         state_dict = torch.load(cfg.STAGE1_E, map_location=lambda storage, loc: storage)
@@ -691,7 +692,7 @@ class condGANTrainer(object):
 
     def train(self):
         self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, self.netE, start_count = load_network(self.gpus, self.data_loader.data.dictionary)
+            self.inception_model, self.netE, start_count = load_network(self.gpus, self.data_loader.dataset.dictionary)
         avg_param_G = copy_G_params(self.netG)
 
         self.optimizerG, self.optimizersD = \
@@ -733,7 +734,7 @@ class condGANTrainer(object):
                 self.imgs_tcpu, self.real_imgs, self.wrong_imgs, \
                     self.txt_ids = self.prepare_data(data)
 
-                self.txt_embedding = self.embedding_model(self.txt_ids)
+                self.txt_embedding = self.netE(self.txt_ids)
                 #######################################################
                 # (1) Generate fake images
                 ######################################################

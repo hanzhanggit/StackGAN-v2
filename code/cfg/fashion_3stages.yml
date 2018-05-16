@@ -1,10 +1,11 @@
 CONFIG_NAME: '3stages'
 
-EXPERIMENT_NAME: 'bilstm_pretrained_big'
+EXPERIMENT_NAME: 'v2_bilstm_pretrained_big'
 DATASET_NAME: 'ssense_256_256'
 
 TEXT_EMBEDDING_MODEL: 'bilstm'
 TEXT_EMBEDDING_MODEL_CFG: 'cfg/embeddings/bilstm_big.yml'
+STAGE1_E: '/output/bilstm_cls_stageI_2018_05_14_15_40_13/Model/encoder_20.pth'
 
 DATA_DIR:   '/data/fashion_final'
 OUTPUT_DIR: '/output'

@@ -400,13 +400,7 @@ class Dictionary(object):
 
 class SsenseDataset(data.Dataset):
     def __init__(self, data_dir, vocab_path, max_len, dataset_name,
-                 split_name='train', 
-                 embedding_filename=None, transform=None, target_transform=None, concat_category=False):
-        ''' Constuctor '''
-
-        self.max_desc_length = max_len
-        self.dictionary = Dictionary(vocab_path)
-        self.concat_category = concat_category
+                 base_size=64, split_name='train', transform=None):
         self.category2idx = {
             'POCKET SQUARES & TIE BARS': 38, 'WALLETS & CARD HOLDERS': 48, 'FINE JEWELRY': 19, 'JACKETS & COATS': 5,
             'HATS': 10, 'TOPS': 0, 'SOCKS': 39, 'SHOULDER BAGS': 21, 'LOAFERS': 37, 'SHIRTS': 1, 'TIES': 8,
@@ -422,9 +416,19 @@ class SsenseDataset(data.Dataset):
             'LACE UPS': 35, 'SCARVES': 15, 'SANDALS': 30, 'BACKPACKS': 24, 'SKIRTS': 9
         }
 
+        self.max_desc_length = max_len
+        self.dictionary = Dictionary(vocab_path)
         self.split_name = split_name
+
         self.transform = transform
-        self.target_transform = target_transform
+        self.norm = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        self.imsize = []
+
+        for i in range(cfg.TREE.BRANCH_NUM):
+            self.imsize.append(base_size)
+            base_size = base_size * 2
 
         self.data_size = 0
         self.dataset_name = dataset_name
@@ -456,7 +460,7 @@ class SsenseDataset(data.Dataset):
         filename = '%s_%s.h5' % (self.dataset_name, self.split_name)
         print("Loading descriptions file from %s" % filename)
 
-        with h5py.File(data_dir + filename) as data_file:
+        with h5py.File(os.path.join(data_dir, filename)) as data_file:
             descriptions = np.asarray(data_file['input_description'].value)
 
         print('Loaded descriptions, shape: ', descriptions.shape)
@@ -466,7 +470,7 @@ class SsenseDataset(data.Dataset):
     def load_categories(self, data_dir):
         filename = '%s_%s.h5' % (self.dataset_name, self.split_name)
         print("Loading Categories file from %s" % filename)
-        with h5py.File(data_dir + filename) as data_file:
+        with h5py.File(os.path.join(data_dir, filename)) as data_file:
             categories = np.asarray(data_file['input_category'].value)
             print('loaded Categories, shape: ', categories.shape)
 
@@ -475,19 +479,13 @@ class SsenseDataset(data.Dataset):
     def load_h5_images(self, data_dir):
         filename = '%s_%s.h5' % (self.dataset_name, self.split_name)
         print("Loading image file from %s" % filename)
-        with h5py.File(data_dir + filename) as images_file:
-            images = np.asarray(images_file['input_image'].value)
+        with h5py.File(os.path.join(data_dir, filename)) as data_file:
+            images = np.asarray(data_file['input_image'].value)
             print('loaded images, shape: ', images.shape)
             self.data_size = images.shape[0]
         return images
 
     def old__getitem__(self, index):
-        if self.concat_category and self.embeddings:
-            embedding = self.embeddings[index, :]
-            category_vector = np.zeros(len(self.category2idx), dtype=embedding.dtype)
-            category_vector[self.category2idx[self.categories[index][0]]] = 1.
-            embedding = np.concatenate([embedding, category_vector], axis=0)
-
         img = self.images[index]
         img = Image.fromarray(img.astype('uint8'), 'RGB').convert('RGB')
         img = self.get_img(img)
@@ -502,7 +500,6 @@ class SsenseDataset(data.Dataset):
         return img_tensor, desc_tensor, desc
 
     def prepair_training_pairs(self, index):
-        import pdb; pdb.set_trace()
         img = self.images[index]
         img = Image.fromarray(img.astype('uint8'), 'RGB').convert('RGB')
         imgs = transform_img(img, self.imsize, self.transform, normalize=self.norm)
@@ -512,10 +509,11 @@ class SsenseDataset(data.Dataset):
         desc_ids = self.pad_sequence(desc_ids)
         desc_tensor = torch.from_numpy(desc_ids).type(torch.LongTensor)
 
-        wrong_ix = random.randint(0, len(self.filenames) - 1)
-        if(self.class_id[index] == self.class_id[wrong_ix]):
-            wrong_ix = random.randint(0, len(self.filenames) - 1)
+        wrong_ix = random.randint(0, self.data_size - 1)
+        if(self.categories[index] == self.categories[wrong_ix]):
+            wrong_ix = random.randint(0, self.data_size - 1)
         wrong_img = self.images[index]
+        wrong_img = Image.fromarray(wrong_img.astype('uint8'), 'RGB').convert('RGB')
         wrong_imgs = transform_img(wrong_img, self.imsize, self.transform, normalize=self.norm)
 
         return imgs, wrong_imgs, desc_tensor, desc  # captions
