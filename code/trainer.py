@@ -22,7 +22,6 @@ from tensorboard import FileWriter
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
 
 
-
 # ################## Shared functions ###################
 def compute_mean_covariance(img):
     batch_size = img.size(0)
@@ -412,20 +411,22 @@ class GANTrainer(object):
                     self.summary_writer.add_summary(summary_G, count)
                 if step == 0:
                     print('''[%d/%d][%d/%d] Loss_D: %.2f Loss_G: %.2f'''
-                           % (epoch, self.max_epoch, step, self.num_batches,
+                          % (epoch, self.max_epoch, step, self.num_batches,
                               errD_total.data[0], errG_total.data[0]))
                 count = count + 1
 
                 if count % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:
-                    save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
-                    save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
+                    save_model(self.netG, avg_param_G,
+                               self.netsD, count, self.model_dir)
+                    save_model(self.netG, avg_param_G,
+                               self.netsD, count, self.model_dir)
                     # Save images
                     backup_para = copy_G_params(self.netG)
                     load_params(self.netG, avg_param_G)
                     #
                     self.fake_imgs, _, _ = self.netG(fixed_noise)
                     save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds,
-                                    count, self.image_dir, self.summary_writer)
+                                     count, self.image_dir, self.summary_writer)
                     #
                     load_params(self.netG, backup_para)
 
@@ -545,7 +546,7 @@ class condGANTrainer(object):
         self.num_batches = len(self.data_loader)
 
     def prepare_data(self, data):
-        imgs, w_imgs, t_embedding, _ = data
+        imgs, w_imgs, txts, _ = data
 
         real_vimgs, wrong_vimgs = [], []
         if cfg.CUDA:
@@ -743,7 +744,8 @@ class condGANTrainer(object):
                 count = count + 1
 
                 if count % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:
-                    save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
+                    save_model(self.netG, avg_param_G,
+                               self.netsD, count, self.model_dir)
                     # Save images
                     backup_para = copy_G_params(self.netG)
                     load_params(self.netG, avg_param_G)

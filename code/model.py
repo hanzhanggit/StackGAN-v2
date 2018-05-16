@@ -11,7 +11,7 @@ import torch.utils.model_zoo as model_zoo
 
 # ############################## For Compute inception score ##############################
 # Besides the inception score computed by pretrained model, especially for fine-grained datasets (such as birds, bedroom),
-#  it is also good to compute inception score using fine-tuned model and manually examine the image quality.
+# it is also good to compute inception score using fine-tuned model and manually examine the image quality.
 class INCEPTION_V3(nn.Module):
     def __init__(self):
         super(INCEPTION_V3, self).__init__()
@@ -51,7 +51,7 @@ class GLU(nn.Module):
     def forward(self, x):
         nc = x.size(1)
         assert nc % 2 == 0, 'channels dont divide 2!'
-        nc = int(nc/2)
+        nc = int(nc / 2)
         return x[:, :nc] * F.sigmoid(x[:, nc:])
 
 
@@ -93,7 +93,6 @@ class ResBlock(nn.Module):
             conv3x3(channel_num, channel_num),
             nn.BatchNorm2d(channel_num)
         )
-
 
     def forward(self, x):
         residual = x
@@ -150,7 +149,6 @@ class INIT_STAGE_G(nn.Module):
             nn.Linear(in_dim, ngf * 4 * 4 * 2, bias=False),
             nn.BatchNorm1d(ngf * 4 * 4 * 2),
             GLU())
-
 
         self.upsample1 = upBlock(ngf, ngf // 2)
         self.upsample2 = upBlock(ngf // 2, ngf // 4)
@@ -250,7 +248,8 @@ class G_NET(nn.Module):
         if cfg.TREE.BRANCH_NUM > 2:
             self.h_net3 = NEXT_STAGE_G(self.gf_dim // 2)
             self.img_net3 = GET_IMAGE_G(self.gf_dim // 4)
-        if cfg.TREE.BRANCH_NUM > 3: # Recommended structure (mainly limited by GPU memory), and not test yet
+        # Recommended structure (mainly limited by GPU memory), and not test yet
+        if cfg.TREE.BRANCH_NUM > 3:
             self.h_net4 = NEXT_STAGE_G(self.gf_dim // 4, num_residual=1)
             self.img_net4 = GET_IMAGE_G(self.gf_dim // 8)
         if cfg.TREE.BRANCH_NUM > 4:
@@ -391,8 +390,8 @@ class D_NET128(nn.Module):
         if cfg.GAN.B_CONDITION:
             self.jointConv = Block3x3_leakRelu(ndf * 8 + efg, ndf * 8)
             self.uncond_logits = nn.Sequential(
-            nn.Conv2d(ndf * 8, 1, kernel_size=4, stride=4),
-            nn.Sigmoid())
+                nn.Conv2d(ndf * 8, 1, kernel_size=4, stride=4),
+                nn.Sigmoid())
 
     def forward(self, x_var, c_code=None):
         x_code = self.img_code_s16(x_var)
