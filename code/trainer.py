@@ -19,6 +19,7 @@ from copy import deepcopy
 from tensorboardX import FileWriter
 from tensorboardX import summary
 from torch.autograd import Variable
+from tqdm import tqdm
 
 from miscc.config import cfg
 from miscc.utils import mkdir_p
@@ -398,7 +399,7 @@ class GANTrainer(object):
         for epoch in range(start_epoch, self.max_epoch):
             start_t = time.time()
 
-            for step, data in enumerate(self.data_loader, 0):
+            for step, data in enumerate(tqdm(self.data_loader, desc='training'), 0):
                 #######################################################
                 # (0) Prepare training data
                 ######################################################
@@ -727,7 +728,7 @@ class condGANTrainer(object):
         for epoch in range(start_epoch, self.max_epoch):
             start_t = time.time()
 
-            for step, data in enumerate(self.data_loader, 0):
+            for step, data in enumerate(tqdm(self.data_loader, desc='training'), 0):
                 #######################################################
                 # (0) Prepare training data
                 ######################################################
@@ -886,7 +887,7 @@ class condGANTrainer(object):
 
             # switch to evaluate mode
             netG.eval()
-            for step, data in enumerate(self.data_loader, 0):
+            for step, data in enumerate(tqdm(self.data_loader, desc='evaluate'), 0):
                 imgs, t_embeddings, filenames = data
                 if cfg.CUDA:
                     t_embeddings = Variable(t_embeddings).cuda()
