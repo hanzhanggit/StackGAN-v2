@@ -9,6 +9,7 @@ ARG work_dir
 
 # Install some packages I need
 RUN apt-get update && apt-get install -y \
+    ttf-freefont \
     vim \
     nano \
     python-pip \

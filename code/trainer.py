@@ -22,7 +22,7 @@ from torch.autograd import Variable
 from tqdm import tqdm
 
 from miscc.config import cfg
-from miscc.utils import mkdir_p
+from miscc.utils import mkdir_p, save_super_images
 
 
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
@@ -109,6 +109,24 @@ def negative_log_posterior_probability(predictions, num_splits=1):
     return np.mean(scores), np.std(scores)
 
 
+def load_embedding_model(dictionary):
+    # Loading embedding models
+    if cfg.TEXT_EMBEDDING_MODEL != '' and cfg.TEXT_EMBEDDING_MODEL_CFG != '':
+        with open(cfg.TEXT_EMBEDDING_MODEL_CFG, 'rt') as file_:
+            model_config = yaml.load(file_)
+            model_config['n_src_vocab'] = len(dictionary)
+        embedding_model = EmbedderStore.get_from_configs(cfg, model_config)
+    else:
+        embedding_model = embedding_models.EmbeddingBlock(cfg.TEXT.DIMENSION / cfg.TEXT.MAX_LEN, len(dictionary))
+
+    if cfg.STAGE1_E:
+        state_dict = torch.load(cfg.STAGE1_E, map_location=lambda storage, loc: storage)
+        embedding_model.load_state_dict(state_dict)
+        print('Load embedding model weights from: %s' % cfg.STAGE1_E)
+
+    return embedding_model
+
+
 def load_network(gpus, dictionary=None):
     netG = G_NET()
     netG.apply(weights_init)
@@ -153,20 +171,7 @@ def load_network(gpus, dictionary=None):
 
     inception_model = INCEPTION_V3()
 
-    # Loading embedding models
-    if cfg.TEXT_EMBEDDING_MODEL != '' and cfg.TEXT_EMBEDDING_MODEL_CFG != '':
-        with open(cfg.TEXT_EMBEDDING_MODEL_CFG, 'rt') as file_:
-            model_config = yaml.load(file_)
-            model_config['n_src_vocab'] = len(dictionary)
-        embedding_model = EmbedderStore.get_from_configs(cfg, model_config)
-    else:
-        embedding_model = embedding_models.EmbeddingBlock(cfg.TEXT.DIMENSION / cfg.TEXT.MAX_LEN, len(dictionary))
-
-    if cfg.STAGE1_E:
-        state_dict = torch.load(cfg.STAGE1_E, map_location=lambda storage, loc: storage)
-        embedding_model.load_state_dict(state_dict)
-        print('Load embedding model weights from: %s' % cfg.STAGE1_E)
-
+    embedding_model = load_embedding_model(dictionary)
     for param in embedding_model.parameters():
         param.requires_grad = False
 
@@ -869,6 +874,9 @@ class condGANTrainer(object):
             netG.load_state_dict(state_dict)
             print('Load ', cfg.TRAIN.NET_G)
 
+            netE = load_embedding_model(self.data_loader.dataset.dictionary)
+            print(netE)
+
             # the path to save generated images
             s_tmp = cfg.TRAIN.NET_G
             istart = s_tmp.rfind('_') + 1
@@ -881,10 +889,13 @@ class condGANTrainer(object):
             noise = Variable(torch.FloatTensor(self.batch_size, nz))
             if cfg.CUDA:
                 netG.cuda()
+                netE.cuda()
                 noise = noise.cuda()
 
             # switch to evaluate mode
             netG.eval()
+            count = 0
+            output_dir = os.path.join(cfg.OUTPUT_DIR, cfg.EXPERIMENT_NAME)
             for step, data in enumerate(tqdm(self.data_loader, desc='evaluate'), 0):
                 imgs, txt_ids, txts = data
 
@@ -893,22 +904,35 @@ class condGANTrainer(object):
                 else:
                     txt_ids = Variable(txt_ids)
 
-                t_embeddings = self.netE(self.txt_ids)
+                txts_embeddings = netE(txt_ids)
 
-                embedding_dim = t_embeddings.size(1)
                 batch_size = imgs[0].size(0)
-                noise.data.resize_(batch_size, nz)
-                noise.data.normal_(0, 1)
+                sample_size = cfg.TEST.NUM_IMAGES
 
-                fake_img_list = []
-                for i in range(embedding_dim):
-                    fake_imgs, _, _ = netG(noise, t_embeddings[:, i, :])
-                    if cfg.TEST.B_EXAMPLE:
-                        fake_img_list.append(fake_imgs[2].data.cpu())
-                    else:
-                        self.save_singleimages(fake_imgs[-1], save_dir, split_dir, i, 256, txts)
-                        self.save_singleimages(fake_imgs[-2], save_dir, split_dir, i, 128, txts)
-                        self.save_singleimages(fake_imgs[-3], save_dir, split_dir, i, 64, txts)
+                imgs64, imgs128, imgs256 = [], [], []
+                for i in range(0, batch_size):
+                    noise.data.resize_(sample_size, nz).normal_(0, 1)
+                    txt_embedding = txts_embeddings[i].repeat(sample_size, 1)
 
-                if cfg.TEST.B_EXAMPLE:
-                    self.save_superimages(fake_img_list, txts, save_dir, split_dir, 256)
+                    fake_imgs, _, _ = netG(noise, txt_embedding)
+
+                    imgs64.append(normalize_(fake_imgs[0]))
+                    imgs128.append(normalize_(fake_imgs[1]))
+                    imgs256.append(normalize_(fake_imgs[2]))
+
+                save_super_images(imgs64, imgs128, imgs256, txts,
+                                  batch_size, cfg.TEXT.MAX_LEN, count, output_dir)
+
+                count = count + batch_size + 1
+
+
+def normalize_(images):
+    numpy_imgs = []
+    for i in range(images.size(0)):
+        img = images[i].add(1).div(2).mul(255).clamp(0, 255).byte()
+        ndarr = img.permute(1, 2, 0).data.cpu().numpy()
+        numpy_imgs.append(ndarr)
+
+    numpy_arr = np.asarray(numpy_imgs)
+
+    return numpy_arr
