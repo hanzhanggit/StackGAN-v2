@@ -808,7 +808,7 @@ class condGANTrainer(object):
                         imgs256.append(normalize_(fake_imgs[2]))
 
                     save_images_with_text(
-                        imgs64, imgs128, imgs256, self.txts,
+                        imgs64, imgs128, imgs256, self.imgs_tcpu, self.txts,
                         batch_size, cfg.TEXT.MAX_LEN, count, self.image_dir)
                     #
                     load_params(self.netG, backup_para)
@@ -935,7 +935,7 @@ class condGANTrainer(object):
                     imgs256.append(normalize_(fake_imgs[2]))
 
                 save_images_with_text(
-                    imgs64, imgs128, imgs256, txts,
+                    imgs64, imgs128, imgs256, imgs, txts,
                     batch_size, cfg.TEXT.MAX_LEN, count, output_dir)
 
                 count = count + batch_size + 1
