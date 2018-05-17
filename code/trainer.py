@@ -836,11 +836,9 @@ class condGANTrainer(object):
             super_img = torch.cat(super_img, 0)
             vutils.save_image(super_img, savename, nrow=10, normalize=True)
 
-    def save_singleimages(self, images, filenames,
-                          save_dir, split_dir, sentenceID, imsize):
+    def save_singleimages(self, images, save_dir, split_dir, sentenceID, imsize, txts):
         for i in range(images.size(0)):
-            s_tmp = '%s/single_samples/%s/%s' %\
-                (save_dir, split_dir, filenames[i])
+            s_tmp = '%s/single_samples/%s/%s' % (save_dir, split_dir)
             folder = s_tmp[:s_tmp.rfind('/')]
             if not os.path.isdir(folder):
                 print('Make a new folder: ', folder)
@@ -888,12 +886,14 @@ class condGANTrainer(object):
             # switch to evaluate mode
             netG.eval()
             for step, data in enumerate(tqdm(self.data_loader, desc='evaluate'), 0):
-                imgs, t_embeddings, filenames = data
+                imgs, txt_ids, txts = data
+
                 if cfg.CUDA:
-                    t_embeddings = Variable(t_embeddings).cuda()
+                    txt_ids = Variable(txt_ids).cuda()
                 else:
-                    t_embeddings = Variable(t_embeddings)
-                # print(t_embeddings[:, 0, :], t_embeddings.size(1))
+                    txt_ids = Variable(txt_ids)
+
+                t_embeddings = self.netE(self.txt_ids)
 
                 embedding_dim = t_embeddings.size(1)
                 batch_size = imgs[0].size(0)
@@ -904,21 +904,11 @@ class condGANTrainer(object):
                 for i in range(embedding_dim):
                     fake_imgs, _, _ = netG(noise, t_embeddings[:, i, :])
                     if cfg.TEST.B_EXAMPLE:
-                        # fake_img_list.append(fake_imgs[0].data.cpu())
-                        # fake_img_list.append(fake_imgs[1].data.cpu())
                         fake_img_list.append(fake_imgs[2].data.cpu())
                     else:
-                        self.save_singleimages(fake_imgs[-1], filenames,
-                                               save_dir, split_dir, i, 256)
-                        # self.save_singleimages(fake_imgs[-2], filenames,
-                        #                        save_dir, split_dir, i, 128)
-                        # self.save_singleimages(fake_imgs[-3], filenames,
-                        #                        save_dir, split_dir, i, 64)
-                    # break
+                        self.save_singleimages(fake_imgs[-1], save_dir, split_dir, i, 256, txts)
+                        self.save_singleimages(fake_imgs[-2], save_dir, split_dir, i, 128, txts)
+                        self.save_singleimages(fake_imgs[-3], save_dir, split_dir, i, 64, txts)
+
                 if cfg.TEST.B_EXAMPLE:
-                    # self.save_superimages(fake_img_list, filenames,
-                    #                       save_dir, split_dir, 64)
-                    # self.save_superimages(fake_img_list, filenames,
-                    #                       save_dir, split_dir, 128)
-                    self.save_superimages(fake_img_list, filenames,
-                                          save_dir, split_dir, 256)
+                    self.save_superimages(fake_img_list, txts, save_dir, split_dir, 256)

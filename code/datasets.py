@@ -528,7 +528,7 @@ class SsenseDataset(data.Dataset):
         desc_ids = self.pad_sequence(desc_ids)
         desc_tensor = torch.from_numpy(desc_ids).type(torch.LongTensor)
 
-        return imgs, desc_tensor, index  # captions
+        return imgs, desc_tensor, desc  # captions
 
     def __getitem__(self, index):
         return self.iterator(index)
