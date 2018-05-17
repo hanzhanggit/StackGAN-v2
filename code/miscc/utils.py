@@ -62,10 +62,9 @@ def save_images_with_text(
             hr_img = hr_sample_batchs[i][j]
             sr_img = sr_sample_batchs[i][j]
             if j == 0:
-                imresize(imresize(reals_batch[i], lr_img.shape[:2]), sr_img.shape[:2])
-                row1.append(imresize(imresize(reals_batch[i], lr_img.shape[:2]), sr_img.shape[:2]))
-                row2.append(imresize(imresize(reals_batch[i], hr_img.shape[:2]), sr_img.shape[:2]))
-                row3.append(reals_batch[i])
+                row1.append(imresize(reals_batch[0][i], sr_img.shape[:2]))
+                row2.append(imresize(reals_batch[1][i], sr_img.shape[:2]))
+                row3.append(imresize(reals_batch[2][i], sr_img.shape[:2]))
 
             lr_re_sample = imresize(lr_img, sr_img.shape[:2])
             hr_re_sample = imresize(hr_img, sr_img.shape[:2])
