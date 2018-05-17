@@ -356,7 +356,7 @@ class TextDataset(data.Dataset):
 
 
 class SplitType:
-    train = 'train'
+    bigboi = 'train'
     valid = 'validation'
     baby = 'baby'
 

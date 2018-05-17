@@ -76,6 +76,8 @@ if __name__ == "__main__":
         transforms.RandomCrop(imsize),
         transforms.RandomHorizontalFlip()])
 
+    image_transform = None
+
     if cfg.GAN.B_CONDITION:  # text to image task
         from datasets import SsenseDataset, SplitType
         dataset = SsenseDataset(

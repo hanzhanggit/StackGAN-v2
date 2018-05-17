@@ -1,6 +1,6 @@
 CONFIG_NAME: '3stages'
 
-EXPERIMENT_NAME: 'v2_bilstm_pretrained_big_eval'
+EXPERIMENT_NAME: 'v2_bilstm_pretrained_big_no_transform_eval'
 DATASET_NAME: 'ssense_256_256'
 
 TEXT_EMBEDDING_MODEL: 'bilstm'
