@@ -577,7 +577,7 @@ class condGANTrainer(object):
         self.num_batches = len(self.data_loader)
 
     def prepare_data(self, data):
-        imgs, w_imgs, txt_ids, _ = data
+        imgs, w_imgs, txt_ids, desc = data
 
         real_vimgs, wrong_vimgs = [], []
         if cfg.CUDA:
@@ -593,7 +593,7 @@ class condGANTrainer(object):
                 real_vimgs.append(Variable(imgs[i]))
                 wrong_vimgs.append(Variable(w_imgs[i]))
 
-        return imgs, real_vimgs, wrong_vimgs, vids
+        return imgs, real_vimgs, wrong_vimgs, vids, desc
 
     def train_Dnet(self, idx, count):
         flag = count % 100
@@ -715,9 +715,14 @@ class condGANTrainer(object):
         self.gradient_half = torch.FloatTensor([0.5])
 
         nz = cfg.GAN.Z_DIM
+        sample_size = cfg.TRAIN.NUM_IMAGES
+
+        sample_noise = Variable(torch.FloatTensor(sample_size, nz))
         noise = Variable(torch.FloatTensor(self.batch_size, nz))
         fixed_noise = \
             Variable(torch.FloatTensor(self.batch_size, nz).normal_(0, 1))
+
+        noise = Variable(torch.FloatTensor(self.batch_size, nz))
 
         if cfg.CUDA:
             self.criterion.cuda()
@@ -725,7 +730,7 @@ class condGANTrainer(object):
             self.fake_labels = self.fake_labels.cuda()
             self.gradient_one = self.gradient_one.cuda()
             self.gradient_half = self.gradient_half.cuda()
-            noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
+            noise, fixed_noise, sample_noise = noise.cuda(), fixed_noise.cuda(), sample_noise.cuda()
 
         predictions = []
         count = start_count
@@ -738,7 +743,7 @@ class condGANTrainer(object):
                 # (0) Prepare training data
                 ######################################################
                 self.imgs_tcpu, self.real_imgs, self.wrong_imgs, \
-                    self.txt_ids = self.prepare_data(data)
+                    self.txt_ids, self.txts = self.prepare_data(data)
 
                 self.txt_embedding = self.netE(self.txt_ids)
                 #######################################################
@@ -784,10 +789,27 @@ class condGANTrainer(object):
                     backup_para = copy_G_params(self.netG)
                     load_params(self.netG, avg_param_G)
                     #
-                    self.fake_imgs, _, _ = \
-                        self.netG(fixed_noise, self.txt_embedding)
-                    save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds,
-                                     count, self.image_dir, self.summary_writer)
+                    self.fake_imgs, _, _ = self.netG(fixed_noise, self.txt_embedding)
+                    save_img_results(
+                        self.imgs_tcpu, self.fake_imgs, self.num_Ds,
+                        count, self.image_dir, self.summary_writer)
+
+                    # save images with text
+                    imgs64, imgs128, imgs256 = [], [], []
+                    batch_size = self.txt_embedding.size(0)
+                    for i in range(0, batch_size):
+                        sample_noise.data.normal_(0, 1)
+                        txt_embedding = self.txt_embedding[i].repeat(sample_size, 1)
+
+                        fake_imgs, _, _ = self.netG(sample_noise, txt_embedding)
+
+                        imgs64.append(normalize_(fake_imgs[0]))
+                        imgs128.append(normalize_(fake_imgs[1]))
+                        imgs256.append(normalize_(fake_imgs[2]))
+
+                    save_images_with_text(
+                        imgs64, imgs128, imgs256, self.txts,
+                        batch_size, cfg.TEXT.MAX_LEN, count, self.image_dir)
                     #
                     load_params(self.netG, backup_para)
 
@@ -878,7 +900,8 @@ class condGANTrainer(object):
             print(netE)
 
             nz = cfg.GAN.Z_DIM
-            noise = Variable(torch.FloatTensor(self.batch_size, nz))
+            sample_size = cfg.TEST.NUM_IMAGES
+            noise = Variable(torch.FloatTensor(sample_size, nz))
             if cfg.CUDA:
                 netG.cuda()
                 netE.cuda()
@@ -899,11 +922,10 @@ class condGANTrainer(object):
                 txts_embeddings = netE(txt_ids)
 
                 batch_size = imgs[0].size(0)
-                sample_size = cfg.TEST.NUM_IMAGES
 
                 imgs64, imgs128, imgs256 = [], [], []
                 for i in range(0, batch_size):
-                    noise.data.resize_(sample_size, nz).normal_(0, 1)
+                    noise.data.normal_(0, 1)
                     txt_embedding = txts_embeddings[i].repeat(sample_size, 1)
 
                     fake_imgs, _, _ = netG(noise, txt_embedding)

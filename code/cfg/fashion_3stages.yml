@@ -29,6 +29,7 @@ TRAIN:
     GENERATOR_LR: 0.0002
     COEFF:
       UNCOND_LOSS: 1.0
+    NUM_IMAGES: 8
 
 
 GAN:

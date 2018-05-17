@@ -85,7 +85,7 @@ if __name__ == "__main__":
             cfg.TEXT.VOCAB_PATH,
             cfg.TEXT.MAX_LEN,
             cfg.DATASET_NAME,
-            split_name=SplitType.bigboi,
+            split_name=SplitType.baby,
             base_size=cfg.TREE.BASE_SIZE,
             transform=image_transform)
     else:
