@@ -35,9 +35,10 @@ def drawCaption(img, caption, max_len):
     return img_txt
 
 
-def save_super_images(lr_sample_batchs, hr_sample_batchs, sr_sample_batchs,
-                      texts_batch, batch_size, max_len,
-                      startID, save_dir=None):
+def save_images_with_text(
+        lr_sample_batchs, hr_sample_batchs, sr_sample_batchs,
+        texts_batch, batch_size, max_len,
+        startID, save_dir=None):
 
     if save_dir and not os.path.isdir(save_dir):
         print('Make a new folder: ', save_dir)

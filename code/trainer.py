@@ -22,7 +22,7 @@ from torch.autograd import Variable
 from tqdm import tqdm
 
 from miscc.config import cfg
-from miscc.utils import mkdir_p, save_super_images
+from miscc.utils import mkdir_p, save_images_with_text
 
 
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
@@ -877,14 +877,6 @@ class condGANTrainer(object):
             netE = load_embedding_model(self.data_loader.dataset.dictionary)
             print(netE)
 
-            # the path to save generated images
-            s_tmp = cfg.TRAIN.NET_G
-            istart = s_tmp.rfind('_') + 1
-            iend = s_tmp.rfind('.')
-            iteration = int(s_tmp[istart:iend])
-            s_tmp = s_tmp[:s_tmp.rfind('/')]
-            save_dir = '%s/iteration%d' % (s_tmp, iteration)
-
             nz = cfg.GAN.Z_DIM
             noise = Variable(torch.FloatTensor(self.batch_size, nz))
             if cfg.CUDA:
@@ -920,8 +912,9 @@ class condGANTrainer(object):
                     imgs128.append(normalize_(fake_imgs[1]))
                     imgs256.append(normalize_(fake_imgs[2]))
 
-                save_super_images(imgs64, imgs128, imgs256, txts,
-                                  batch_size, cfg.TEXT.MAX_LEN, count, output_dir)
+                save_images_with_text(
+                    imgs64, imgs128, imgs256, txts,
+                    batch_size, cfg.TEXT.MAX_LEN, count, output_dir)
 
                 count = count + batch_size + 1
 
