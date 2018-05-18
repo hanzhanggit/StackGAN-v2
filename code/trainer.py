@@ -1,26 +1,32 @@
 from __future__ import print_function
 from six.moves import range
 
-import torch.backends.cudnn as cudnn
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
-import torch.optim as optim
-import torchvision.utils as vutils
-import numpy as np
+import yaml
 import os
 import time
-from PIL import Image, ImageFont, ImageDraw
+
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.utils as vutils
+
+import embedding_models
+
+from PIL import Image
 from copy import deepcopy
+from tensorboardX import FileWriter
+from tensorboardX import summary
+from torch.autograd import Variable
+from tqdm import tqdm
 
 from miscc.config import cfg
-from miscc.utils import mkdir_p
+from miscc.utils import mkdir_p, save_images_with_text
 
-from tensorboard import summary
-from tensorboard import FileWriter
 
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
-
+from embedding_models.registry import EmbedderStore
 
 
 # ################## Shared functions ###################
@@ -103,7 +109,25 @@ def negative_log_posterior_probability(predictions, num_splits=1):
     return np.mean(scores), np.std(scores)
 
 
-def load_network(gpus):
+def load_embedding_model(dictionary):
+    # Loading embedding models
+    if cfg.TEXT_EMBEDDING_MODEL != '' and cfg.TEXT_EMBEDDING_MODEL_CFG != '':
+        with open(cfg.TEXT_EMBEDDING_MODEL_CFG, 'rt') as file_:
+            model_config = yaml.load(file_)
+            model_config['n_src_vocab'] = len(dictionary)
+        embedding_model = EmbedderStore.get_from_configs(cfg, model_config)
+    else:
+        embedding_model = embedding_models.EmbeddingBlock(cfg.TEXT.DIMENSION / cfg.TEXT.MAX_LEN, len(dictionary))
+
+    if cfg.STAGE1_E:
+        state_dict = torch.load(cfg.STAGE1_E, map_location=lambda storage, loc: storage)
+        embedding_model.load_state_dict(state_dict)
+        print('Load embedding model weights from: %s' % cfg.STAGE1_E)
+
+    return embedding_model
+
+
+def load_network(gpus, dictionary=None):
     netG = G_NET()
     netG.apply(weights_init)
     netG = torch.nn.DataParallel(netG, device_ids=gpus)
@@ -147,14 +171,20 @@ def load_network(gpus):
 
     inception_model = INCEPTION_V3()
 
+    embedding_model = load_embedding_model(dictionary)
+    for param in embedding_model.parameters():
+        param.requires_grad = False
+
     if cfg.CUDA:
         netG.cuda()
         for i in range(len(netsD)):
             netsD[i].cuda()
         inception_model = inception_model.cuda()
+        embedding_model.cuda()
+
     inception_model.eval()
 
-    return netG, netsD, len(netsD), inception_model, count
+    return netG, netsD, len(netsD), inception_model, embedding_model, count
 
 
 def define_optimizers(netG, netsD):
@@ -345,7 +375,7 @@ class GANTrainer(object):
 
     def train(self):
         self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, start_count = load_network(self.gpus)
+            self.inception_model, _, start_count = load_network(self.gpus)
         avg_param_G = copy_G_params(self.netG)
 
         self.optimizerG, self.optimizersD = \
@@ -374,7 +404,7 @@ class GANTrainer(object):
         for epoch in range(start_epoch, self.max_epoch):
             start_t = time.time()
 
-            for step, data in enumerate(self.data_loader, 0):
+            for step, data in enumerate(tqdm(self.data_loader, desc='training'), 0):
                 #######################################################
                 # (0) Prepare training data
                 ######################################################
@@ -412,20 +442,22 @@ class GANTrainer(object):
                     self.summary_writer.add_summary(summary_G, count)
                 if step == 0:
                     print('''[%d/%d][%d/%d] Loss_D: %.2f Loss_G: %.2f'''
-                           % (epoch, self.max_epoch, step, self.num_batches,
+                          % (epoch, self.max_epoch, step, self.num_batches,
                               errD_total.data[0], errG_total.data[0]))
                 count = count + 1
 
                 if count % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:
-                    save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
-                    save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
+                    save_model(self.netG, avg_param_G,
+                               self.netsD, count, self.model_dir)
+                    save_model(self.netG, avg_param_G,
+                               self.netsD, count, self.model_dir)
                     # Save images
                     backup_para = copy_G_params(self.netG)
                     load_params(self.netG, avg_param_G)
                     #
                     self.fake_imgs, _, _ = self.netG(fixed_noise)
                     save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds,
-                                    count, self.image_dir, self.summary_writer)
+                                     count, self.image_dir, self.summary_writer)
                     #
                     load_params(self.netG, backup_para)
 
@@ -545,13 +577,14 @@ class condGANTrainer(object):
         self.num_batches = len(self.data_loader)
 
     def prepare_data(self, data):
-        imgs, w_imgs, t_embedding, _ = data
+        imgs, w_imgs, txt_ids, desc = data
 
         real_vimgs, wrong_vimgs = [], []
         if cfg.CUDA:
-            vembedding = Variable(t_embedding).cuda()
+            vids = Variable(txt_ids).cuda()
         else:
-            vembedding = Variable(t_embedding)
+            vids = Variable(txt_ids)
+
         for i in range(self.num_Ds):
             if cfg.CUDA:
                 real_vimgs.append(Variable(imgs[i]).cuda())
@@ -559,7 +592,8 @@ class condGANTrainer(object):
             else:
                 real_vimgs.append(Variable(imgs[i]))
                 wrong_vimgs.append(Variable(w_imgs[i]))
-        return imgs, real_vimgs, wrong_vimgs, vembedding
+
+        return imgs, real_vimgs, wrong_vimgs, vids, desc
 
     def train_Dnet(self, idx, count):
         flag = count % 100
@@ -664,7 +698,7 @@ class condGANTrainer(object):
 
     def train(self):
         self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, start_count = load_network(self.gpus)
+            self.inception_model, self.netE, start_count = load_network(self.gpus, self.data_loader.dataset.dictionary)
         avg_param_G = copy_G_params(self.netG)
 
         self.optimizerG, self.optimizersD = \
@@ -681,9 +715,14 @@ class condGANTrainer(object):
         self.gradient_half = torch.FloatTensor([0.5])
 
         nz = cfg.GAN.Z_DIM
+        sample_size = cfg.TRAIN.NUM_IMAGES
+
+        sample_noise = Variable(torch.FloatTensor(sample_size, nz))
         noise = Variable(torch.FloatTensor(self.batch_size, nz))
         fixed_noise = \
             Variable(torch.FloatTensor(self.batch_size, nz).normal_(0, 1))
+
+        noise = Variable(torch.FloatTensor(self.batch_size, nz))
 
         if cfg.CUDA:
             self.criterion.cuda()
@@ -691,7 +730,7 @@ class condGANTrainer(object):
             self.fake_labels = self.fake_labels.cuda()
             self.gradient_one = self.gradient_one.cuda()
             self.gradient_half = self.gradient_half.cuda()
-            noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
+            noise, fixed_noise, sample_noise = noise.cuda(), fixed_noise.cuda(), sample_noise.cuda()
 
         predictions = []
         count = start_count
@@ -699,13 +738,14 @@ class condGANTrainer(object):
         for epoch in range(start_epoch, self.max_epoch):
             start_t = time.time()
 
-            for step, data in enumerate(self.data_loader, 0):
+            for step, data in enumerate(tqdm(self.data_loader, desc='training'), 0):
                 #######################################################
                 # (0) Prepare training data
                 ######################################################
                 self.imgs_tcpu, self.real_imgs, self.wrong_imgs, \
-                    self.txt_embedding = self.prepare_data(data)
+                    self.txt_ids, self.txts = self.prepare_data(data)
 
+                self.txt_embedding = self.netE(self.txt_ids)
                 #######################################################
                 # (1) Generate fake images
                 ######################################################
@@ -743,15 +783,33 @@ class condGANTrainer(object):
                 count = count + 1
 
                 if count % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:
-                    save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
+                    save_model(self.netG, avg_param_G,
+                               self.netsD, count, self.model_dir)
                     # Save images
                     backup_para = copy_G_params(self.netG)
                     load_params(self.netG, avg_param_G)
                     #
-                    self.fake_imgs, _, _ = \
-                        self.netG(fixed_noise, self.txt_embedding)
-                    save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds,
-                                     count, self.image_dir, self.summary_writer)
+                    self.fake_imgs, _, _ = self.netG(fixed_noise, self.txt_embedding)
+                    save_img_results(
+                        self.imgs_tcpu, self.fake_imgs, self.num_Ds,
+                        count, self.image_dir, self.summary_writer)
+
+                    # save images with text
+                    imgs64, imgs128, imgs256 = [], [], []
+                    batch_size = self.txt_embedding.size(0)
+                    for i in range(0, batch_size):
+                        sample_noise.data.normal_(0, 1)
+                        txt_embedding = self.txt_embedding[i].repeat(sample_size, 1)
+
+                        fake_imgs, _, _ = self.netG(sample_noise, txt_embedding)
+
+                        imgs64.append(normalize_(fake_imgs[0]))
+                        imgs128.append(normalize_(fake_imgs[1]))
+                        imgs256.append(normalize_(fake_imgs[2]))
+
+                    save_images_with_text(
+                        imgs64, imgs128, imgs256, self.imgs_tcpu, self.txts,
+                        batch_size, cfg.TEXT.MAX_LEN, count, self.image_dir)
                     #
                     load_params(self.netG, backup_para)
 
@@ -805,11 +863,9 @@ class condGANTrainer(object):
             super_img = torch.cat(super_img, 0)
             vutils.save_image(super_img, savename, nrow=10, normalize=True)
 
-    def save_singleimages(self, images, filenames,
-                          save_dir, split_dir, sentenceID, imsize):
+    def save_singleimages(self, images, save_dir, split_dir, sentenceID, imsize, txts):
         for i in range(images.size(0)):
-            s_tmp = '%s/single_samples/%s/%s' %\
-                (save_dir, split_dir, filenames[i])
+            s_tmp = '%s/single_samples/%s/%s' % (save_dir, split_dir)
             folder = s_tmp[:s_tmp.rfind('/')]
             if not os.path.isdir(folder):
                 print('Make a new folder: ', folder)
@@ -840,54 +896,58 @@ class condGANTrainer(object):
             netG.load_state_dict(state_dict)
             print('Load ', cfg.TRAIN.NET_G)
 
-            # the path to save generated images
-            s_tmp = cfg.TRAIN.NET_G
-            istart = s_tmp.rfind('_') + 1
-            iend = s_tmp.rfind('.')
-            iteration = int(s_tmp[istart:iend])
-            s_tmp = s_tmp[:s_tmp.rfind('/')]
-            save_dir = '%s/iteration%d' % (s_tmp, iteration)
+            netE = load_embedding_model(self.data_loader.dataset.dictionary)
+            print(netE)
 
             nz = cfg.GAN.Z_DIM
-            noise = Variable(torch.FloatTensor(self.batch_size, nz))
+            sample_size = cfg.TEST.NUM_IMAGES
+            noise = Variable(torch.FloatTensor(sample_size, nz))
             if cfg.CUDA:
                 netG.cuda()
+                netE.cuda()
                 noise = noise.cuda()
 
             # switch to evaluate mode
             netG.eval()
-            for step, data in enumerate(self.data_loader, 0):
-                imgs, t_embeddings, filenames = data
+            count = 0
+            output_dir = os.path.join(cfg.OUTPUT_DIR, cfg.EXPERIMENT_NAME)
+            for step, data in enumerate(tqdm(self.data_loader, desc='evaluate'), 0):
+                imgs, txt_ids, txts = data
+
                 if cfg.CUDA:
-                    t_embeddings = Variable(t_embeddings).cuda()
+                    txt_ids = Variable(txt_ids).cuda()
                 else:
-                    t_embeddings = Variable(t_embeddings)
-                # print(t_embeddings[:, 0, :], t_embeddings.size(1))
+                    txt_ids = Variable(txt_ids)
 
-                embedding_dim = t_embeddings.size(1)
+                txts_embeddings = netE(txt_ids)
+
                 batch_size = imgs[0].size(0)
-                noise.data.resize_(batch_size, nz)
-                noise.data.normal_(0, 1)
 
-                fake_img_list = []
-                for i in range(embedding_dim):
-                    fake_imgs, _, _ = netG(noise, t_embeddings[:, i, :])
-                    if cfg.TEST.B_EXAMPLE:
-                        # fake_img_list.append(fake_imgs[0].data.cpu())
-                        # fake_img_list.append(fake_imgs[1].data.cpu())
-                        fake_img_list.append(fake_imgs[2].data.cpu())
-                    else:
-                        self.save_singleimages(fake_imgs[-1], filenames,
-                                               save_dir, split_dir, i, 256)
-                        # self.save_singleimages(fake_imgs[-2], filenames,
-                        #                        save_dir, split_dir, i, 128)
-                        # self.save_singleimages(fake_imgs[-3], filenames,
-                        #                        save_dir, split_dir, i, 64)
-                    # break
-                if cfg.TEST.B_EXAMPLE:
-                    # self.save_superimages(fake_img_list, filenames,
-                    #                       save_dir, split_dir, 64)
-                    # self.save_superimages(fake_img_list, filenames,
-                    #                       save_dir, split_dir, 128)
-                    self.save_superimages(fake_img_list, filenames,
-                                          save_dir, split_dir, 256)
+                imgs64, imgs128, imgs256 = [], [], []
+                for i in range(0, batch_size):
+                    noise.data.normal_(0, 1)
+                    txt_embedding = txts_embeddings[i].repeat(sample_size, 1)
+
+                    fake_imgs, _, _ = netG(noise, txt_embedding)
+
+                    imgs64.append(normalize_(fake_imgs[0]))
+                    imgs128.append(normalize_(fake_imgs[1]))
+                    imgs256.append(normalize_(fake_imgs[2]))
+
+                save_images_with_text(
+                    imgs64, imgs128, imgs256, imgs, txts,
+                    batch_size, cfg.TEXT.MAX_LEN, count, output_dir)
+
+                count = count + batch_size + 1
+
+
+def normalize_(images):
+    numpy_imgs = []
+    for i in range(images.size(0)):
+        img = images[i].add(1).div(2).mul(255).clamp(0, 255).byte()
+        ndarr = img.permute(1, 2, 0).data.cpu().numpy()
+        numpy_imgs.append(ndarr)
+
+    numpy_arr = np.asarray(numpy_imgs)
+
+    return numpy_arr

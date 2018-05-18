@@ -4,26 +4,24 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 
-import torch.utils.data as data
-import torchvision.transforms as transforms
-from PIL import Image
-import PIL
 import os
 import os.path
-import pickle
 import random
+import six
+import sys
+from collections import Counter
+
+import h5py
 import numpy as np
 import pandas as pd
+import torch
+import torch.utils.data as data
+import torchvision.transforms as transforms
+
+from PIL import Image
 from miscc.config import cfg
 
-import torch.utils.data as data
-from PIL import Image
-import os
-import os.path
-import six
-import string
-import sys
-import torch
+
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -35,6 +33,21 @@ IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG',
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
+
+
+def transform_img(img, imsize, transform=None, normalize=None):
+    if transform is not None:
+        img = transform(img)
+
+    ret = []
+    for i in range(cfg.TREE.BRANCH_NUM):
+        if i < (cfg.TREE.BRANCH_NUM - 1):
+            re_img = transforms.Scale(imsize[i])(img)
+        else:
+            re_img = img
+        ret.append(normalize(re_img))
+
+    return ret
 
 
 def get_imgs(img_path, imsize, bbox=None,
@@ -184,12 +197,12 @@ class TextDataset(data.Dataset):
     def __init__(self, data_dir, split='train', embedding_type='cnn-rnn',
                  base_size=64, transform=None, target_transform=None):
         self.transform = transform
+        self.target_transform = target_transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-        self.target_transform = target_transform
-
         self.imsize = []
+
         for i in range(cfg.TREE.BRANCH_NUM):
             self.imsize.append(base_size)
             base_size = base_size * 2
@@ -340,3 +353,185 @@ class TextDataset(data.Dataset):
 
     def __len__(self):
         return len(self.filenames)
+
+
+class SplitType:
+    train = 'train'
+    valid = 'validation'
+    baby = 'baby'
+
+
+class Dictionary(object):
+    ''' Holds info about vocabulary '''
+    def __init__(self, path):
+        print(path)
+        self.word2idx = {'UNK': 0, '<eos>': 1, '<pad>': 2}
+        self.idx2word = ['UNK', '<eos>', '<pad>']
+        self.counter = Counter()
+        self.total = len(self.idx2word)
+        with open(path, 'r') as vocab:
+            for i, line in enumerate(vocab.readlines()):
+                word = line.decode('latin1').strip().split('\t')[0]
+                self.add_word(word)
+        print("Loaded dictionary with %d words" % len(self.idx2word))
+
+    def add_word(self, word):
+        if word not in self.word2idx:
+            self.idx2word.append(word)
+            self.word2idx[word] = len(self.idx2word) - 1
+        token_id = self.word2idx[word]
+        self.counter[token_id] += 1
+        self.total += 1
+        return self.word2idx[word]
+
+    def _word2id(self, word):
+        if word not in self.word2idx:
+            # print "It's unkown"
+            return self.word2idx['UNK']
+        return self.word2idx[word]
+
+    def words2ids(self, words):
+        ids = np.asarray(map(self._word2id, words))
+        return ids
+
+    def __len__(self):
+        return len(self.idx2word)
+
+
+class SsenseDataset(data.Dataset):
+    def __init__(self, data_dir, vocab_path, max_len, dataset_name,
+                 base_size=64, split_name='train', transform=None):
+        self.category2idx = {
+            'POCKET SQUARES & TIE BARS': 38, 'WALLETS & CARD HOLDERS': 48, 'FINE JEWELRY': 19, 'JACKETS & COATS': 5,
+            'HATS': 10, 'TOPS': 0, 'SOCKS': 39, 'SHOULDER BAGS': 21, 'LOAFERS': 37, 'SHIRTS': 1, 'TIES': 8,
+            'BRIEFCASES': 40, 'BELTS & SUSPENDERS': 14, 'TOTE BAGS': 27, 'TRAVEL BAGS': 47,
+            'DUFFLE & TOP HANDLE BAGS': 32, 'BAG ACCESSORIES': 46, 'KEYCHAINS': 26,
+            'DUFFLE BAGS': 45, 'SNEAKERS': 17, 'PANTS': 3, 'SWEATERS': 4,
+            'JEWELRY': 23, 'SHORTS': 2, 'ESPADRILLES': 43, 'MESSENGER BAGS': 44,
+            'EYEWEAR': 31, 'HEELS': 41, 'MONKSTRAPS': 36, 'MESSENGER BAGS & SATCHELS': 42,
+            'FLATS': 33, 'BLANKETS': 22, 'POUCHES & DOCUMENT HOLDERS': 29,
+            'DRESSES': 11, 'JUMPSUITS': 13, 'UNDERWEAR & LOUNGEWEAR': 25,
+            'BOAT SHOES & MOCCASINS': 28, 'CLUTCHES & POUCHES': 20, 'JEANS': 6,
+            'SWIMWEAR': 12, 'SUITS & BLAZERS': 7, 'LINGERIE': 16, 'GLOVES': 18, 'BOOTS': 34,
+            'LACE UPS': 35, 'SCARVES': 15, 'SANDALS': 30, 'BACKPACKS': 24, 'SKIRTS': 9
+        }
+
+        self.max_desc_length = max_len
+        self.dictionary = Dictionary(vocab_path)
+        self.split_name = split_name
+
+        self.transform = transform
+        self.norm = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        self.imsize = []
+
+        for i in range(cfg.TREE.BRANCH_NUM):
+            self.imsize.append(base_size)
+            base_size = base_size * 2
+
+        self.data_size = 0
+        self.dataset_name = dataset_name
+
+        split_dir = os.path.join(data_dir, self.split_name)
+        print("Split Dir: %s" % split_dir)
+
+        self.images = self.load_h5_images(split_dir)
+        self.categories = self.load_categories(split_dir)
+        self.descriptions = self.load_descriptions(split_dir)
+
+        if cfg.TRAIN.FLAG:
+            self.iterator = self.prepair_training_pairs
+        else:
+            self.iterator = self.prepair_test_pairs
+
+    def pad_sequence(self, seq):
+        eos_id = self.dictionary.word2idx['<eos>']
+        pad_id = self.dictionary.word2idx['<pad>']
+        if len(seq) < self.max_desc_length:
+            seq = np.concatenate([seq, [eos_id], [pad_id] * (self.max_desc_length - len(seq) - 1)])
+            # seq = np.concatenate([seq, [eos_id] * (self.max_desc_length - len(seq))])
+            return seq
+        elif len(seq) >= self.max_desc_length:
+            seq = np.concatenate([seq[:self.max_desc_length - 1], [eos_id]])
+        return seq
+
+    def load_descriptions(self, data_dir):
+        filename = '%s_%s.h5' % (self.dataset_name, self.split_name)
+        print("Loading descriptions file from %s" % filename)
+
+        with h5py.File(os.path.join(data_dir, filename)) as data_file:
+            descriptions = np.asarray(data_file['input_description'].value)
+
+        print('Loaded descriptions, shape: ', descriptions.shape)
+
+        return descriptions
+
+    def load_categories(self, data_dir):
+        filename = '%s_%s.h5' % (self.dataset_name, self.split_name)
+        print("Loading Categories file from %s" % filename)
+        with h5py.File(os.path.join(data_dir, filename)) as data_file:
+            categories = np.asarray(data_file['input_category'].value)
+            print('loaded Categories, shape: ', categories.shape)
+
+        return categories
+
+    def load_h5_images(self, data_dir):
+        filename = '%s_%s.h5' % (self.dataset_name, self.split_name)
+        print("Loading image file from %s" % filename)
+        with h5py.File(os.path.join(data_dir, filename)) as data_file:
+            images = np.asarray(data_file['input_image'].value)
+            print('loaded images, shape: ', images.shape)
+            self.data_size = images.shape[0]
+        return images
+
+    def old__getitem__(self, index):
+        img = self.images[index]
+        img = Image.fromarray(img.astype('uint8'), 'RGB').convert('RGB')
+        img = self.get_img(img)
+
+        desc = self.descriptions[index][0].decode('latin1')
+        desc_ids = self.dictionary.words2ids(desc.split())
+        desc_ids = self.pad_sequence(desc_ids)
+        desc_tensor = torch.from_numpy(desc_ids).type(torch.LongTensor)
+
+        img_tensor = img.type(torch.FloatTensor)
+
+        return img_tensor, desc_tensor, desc
+
+    def prepair_training_pairs(self, index):
+        img = self.images[index]
+        img = Image.fromarray(img.astype('uint8'), 'RGB').convert('RGB')
+        imgs = transform_img(img, self.imsize, self.transform, normalize=self.norm)
+
+        desc = self.descriptions[index][0].decode('latin1')
+        desc_ids = self.dictionary.words2ids(desc.split())
+        desc_ids = self.pad_sequence(desc_ids)
+        desc_tensor = torch.from_numpy(desc_ids).type(torch.LongTensor)
+
+        wrong_ix = random.randint(0, self.data_size - 1)
+        if(self.categories[index] == self.categories[wrong_ix]):
+            wrong_ix = random.randint(0, self.data_size - 1)
+        wrong_img = self.images[index]
+        wrong_img = Image.fromarray(wrong_img.astype('uint8'), 'RGB').convert('RGB')
+        wrong_imgs = transform_img(wrong_img, self.imsize, self.transform, normalize=self.norm)
+
+        return imgs, wrong_imgs, desc_tensor, desc  # captions
+
+    def prepair_test_pairs(self, index):
+        img = self.images[index]
+        img = Image.fromarray(img.astype('uint8'), 'RGB').convert('RGB')
+        imgs = transform_img(img, self.imsize, self.transform, normalize=self.norm)
+
+        desc = self.descriptions[index][0].decode('latin1')
+        desc_ids = self.dictionary.words2ids(desc.split())
+        desc_ids = self.pad_sequence(desc_ids)
+        desc_tensor = torch.from_numpy(desc_ids).type(torch.LongTensor)
+
+        return imgs, desc_tensor, desc  # captions
+
+    def __getitem__(self, index):
+        return self.iterator(index)
+
+    def __len__(self):
+        return self.data_size

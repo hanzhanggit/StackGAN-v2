@@ -1,0 +1,4 @@
+d_word_vec: 512 
+d_model: 512 
+embedding_size: 512 
+dropout: 0.0

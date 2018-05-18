@@ -10,10 +10,15 @@ __C = edict()
 cfg = __C
 
 # Dataset name: flowers, birds
-__C.DATASET_NAME = 'birds'
+__C.DATASET_NAME = 'ssense_256_256'
+__C.EXPERIMENT_NAME = 'fashion'
 __C.EMBEDDING_TYPE = 'cnn-rnn'
+__C.TEXT_EMBEDDING_MODEL = ''
+__C.TEXT_EMBEDDING_MODEL_CFG = ''
+__C.STAGE1_E = ''
 __C.CONFIG_NAME = ''
 __C.DATA_DIR = ''
+__C.OUTPUT_DIR = '/output'
 
 __C.GPU_ID = '0'
 __C.CUDA = True
@@ -29,7 +34,7 @@ __C.TREE.BASE_SIZE = 64
 __C.TEST = edict()
 __C.TEST.B_EXAMPLE = True
 __C.TEST.SAMPLE_NUM = 30000
-
+__C.TEST.NUM_IMAGES = 8
 
 # Training options
 __C.TRAIN = edict()
@@ -42,6 +47,7 @@ __C.TRAIN.GENERATOR_LR = 2e-4
 __C.TRAIN.FLAG = True
 __C.TRAIN.NET_G = ''
 __C.TRAIN.NET_D = ''
+__C.TRAIN.NUM_IMAGES = 8
 
 __C.TRAIN.COEFF = edict()
 __C.TRAIN.COEFF.KL = 2.0
@@ -61,6 +67,8 @@ __C.GAN.B_CONDITION = False
 
 __C.TEXT = edict()
 __C.TEXT.DIMENSION = 1024
+__C.TEXT.VOCAB_PATH = ''
+__C.TEXT.MAX_LEN = 15
 
 
 def _merge_a_into_b(a, b):
