@@ -1,6 +1,6 @@
 CONFIG_NAME: '3stages'
 
-EXPERIMENT_NAME: 'v2_bilstm_pretrained_big'
+EXPERIMENT_NAME: 'eval_v2_bilstm_pretrained_big_no_transform_64000'
 DATASET_NAME: 'ssense_256_256'
 
 TEXT_EMBEDDING_MODEL: 'bilstm'
@@ -10,26 +10,21 @@ STAGE1_E: '/output/bilstm_cls_stageI_2018_05_14_15_40_13/Model/encoder_20.pth'
 DATA_DIR:   '/data/fashion_final'
 OUTPUT_DIR: '/output'
 
-GPU_ID: '0'
-WORKERS: 4
-
+GPU_ID: '3'
+WORKERS: 1  # 4
 
 TREE:
     BRANCH_NUM: 3
 
 
-TRAIN:
-    FLAG: True
-    NET_G: ''  # '../output/birds_3stages/Model/netG_epoch_700.pth'
-    NET_D: ''  # '../output/birds_3stages/Model/netD'
-    BATCH_SIZE: 24
-    MAX_EPOCH: 600
-    SNAPSHOT_INTERVAL: 2000
-    DISCRIMINATOR_LR: 0.0002
-    GENERATOR_LR: 0.0002
-    COEFF:
-      UNCOND_LOSS: 1.0
+TEST:
+    B_EXAMPLE: False
     NUM_IMAGES: 8
+
+TRAIN:
+    FLAG: False
+    NET_G: '/output/v2_bilstm_pretrained_big_no_transform_3stages_2018_05_17_23_19_20/Model/netG_64000.pth'
+    BATCH_SIZE: 16 
 
 
 GAN:

@@ -1,6 +1,6 @@
 CONFIG_NAME: '3stages'
 
-EXPERIMENT_NAME: 'v2_bilstm_pretrained_big_no_transform_eval'
+EXPERIMENT_NAME: 'eval_v2_bilstm_pretrained_big_transform_166000'
 DATASET_NAME: 'ssense_256_256'
 
 TEXT_EMBEDDING_MODEL: 'bilstm'
@@ -23,7 +23,7 @@ TEST:
 
 TRAIN:
     FLAG: False
-    NET_G: '/output/v2_bilstm_pretrained_big_3stages_2018_05_16_22_59_10/Model/netG_78000.pth'
+    NET_G: '/output/v2_bilstm_pretrained_big_3stages_2018_05_16_22_59_10/Model/netG_166000.pth'
     BATCH_SIZE: 16 
 
 
