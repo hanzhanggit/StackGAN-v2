@@ -11,12 +11,12 @@ Pytorch implementation for reproducing StackGAN_v2 results in the paper [StackGA
 
 <img src="examples/framework.jpg" width="900px" height="350px"/>
 
-
+Note: Code has been updated for Python3 usage. Thank you [David Stap](https://github.com/davidstap/AttnGAN) for your help upgrading the original StackGAN-v2 file.
 
 ### Dependencies
-python 2.7
+python 3.6+
 
-Pytorch
+Pytorch 1.1.0+
 
 In addition, please add the project folder to PYTHONPATH and `pip install` the following packages:
 - `tensorboard`

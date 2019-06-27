@@ -1,4 +1,6 @@
 from __future__ import print_function
+from miscc.config import cfg, cfg_from_file
+
 import torch
 import torchvision.transforms as transforms
 
@@ -16,7 +18,7 @@ dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
 sys.path.append(dir_path)
 
 
-from miscc.config import cfg, cfg_from_file
+
 
 
 # 19 classes --> 7 valid classes with 8,555 images
@@ -95,8 +97,7 @@ if __name__ == "__main__":
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = '../output/%s_%s_%s' % \
-        (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+    output_dir = '../output/%s_%s_%s' % (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
 
     split_dir, bshuffle = 'train', True
     if not cfg.TRAIN.FLAG:
@@ -107,7 +108,7 @@ if __name__ == "__main__":
     # Get data loader
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM-1))
     image_transform = transforms.Compose([
-        transforms.Scale(int(imsize * 76 / 64)),
+        transforms.Resize(int(imsize * 76 / 64)),
         transforms.RandomCrop(imsize),
         transforms.RandomHorizontalFlip()])
     if cfg.DATA_DIR.find('lsun') != -1:
@@ -128,9 +129,8 @@ if __name__ == "__main__":
                               transform=image_transform)
     assert dataset
     num_gpu = len(cfg.GPU_ID.split(','))
-    dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=cfg.TRAIN.BATCH_SIZE * num_gpu,
-        drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS))
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=cfg.TRAIN.BATCH_SIZE * num_gpu,
+                                             drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS))
 
     # Define models and go to train/evaluate
     if not cfg.GAN.B_CONDITION:
