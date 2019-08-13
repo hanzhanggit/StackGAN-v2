@@ -507,7 +507,6 @@ class condGANTrainer(object):
             mkdir_p(self.log_dir)
             self.summary_writer = FileWriter(self.log_dir)
 
-
         s_gpus = cfg.GPU_ID.split(',')
         self.gpus = [int(ix) for ix in s_gpus]
         self.num_gpus = len(self.gpus)
@@ -713,8 +712,8 @@ class condGANTrainer(object):
                     load_params(self.netG, avg_param_G)
                     #
                     self.fake_imgs, _, _ = self.netG(fixed_noise, self.txt_embedding)
-                    save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds, count,
-                                     self.image_dir, self.summary_writer)
+                    save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds, count, self.image_dir,
+                                     self.summary_writer)
                     #
                     load_params(self.netG, backup_para)
 
@@ -765,8 +764,7 @@ class condGANTrainer(object):
             super_img = torch.cat(super_img, 0)
             vutils.save_image(super_img, savename, nrow=10, normalize=True)
 
-    def save_singleimages(self, images, filenames,
-                          save_dir, split_dir, sentenceID, imsize):
+    def save_singleimages(self, images, filenames, save_dir, split_dir, sentenceID, imsize):
         for i in range(images.size(0)):
             s_tmp = '%s/single_samples/%s/%s' % (save_dir, split_dir, filenames[i])
             folder = s_tmp[:s_tmp.rfind('/')]

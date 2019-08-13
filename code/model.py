@@ -570,4 +570,3 @@ class D_NET1024(nn.Module):
             out_uncond = self.uncond_logits(x_code)
             return [output.view(-1), out_uncond.view(-1)]
         return [output.view(-1)]
-
