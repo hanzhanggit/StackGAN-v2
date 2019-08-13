@@ -8,7 +8,6 @@ from torch.autograd import Variable
 from torchvision import models
 
 
-
 # ############################## For Compute inception score ##############################
 # Besides the inception score computed by pretrained model, especially for fine-grained datasets (such as birds, bedroom),
 #  it is also good to compute inception score using fine-tuned model and manually examine the image quality.
@@ -26,9 +25,9 @@ class INCEPTION_V3(nn.Module):
         # print(next(self.model.parameters()).data)
         # print(self.model)
 
-    def forward(self, input):
+    def forward(self, the_input):
         # [-1.0, 1.0] --> [0, 1.0]
-        x = input * 0.5 + 0.5
+        x = the_input * 0.5 + 0.5
         # mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225]
         # --> mean = 0, std = 1
         x[:, 0] = (x[:, 0] - 0.485) / 0.229
@@ -41,7 +40,6 @@ class INCEPTION_V3(nn.Module):
         # 299 x 299 x 3
         x = self.model(x)
         x = nn.Softmax(dim=1)(x)
-        # x = nn.Softmax()(x)
         return x
 
 
@@ -70,7 +68,7 @@ class GLU(nn.Module):
 
 
 def conv3x3(in_planes, out_planes):
-    "3x3 convolution with padding"
+    """ 3x3 convolution with padding """
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False)
 
 
@@ -373,8 +371,7 @@ class D_NET64(nn.Module):
         if cfg.GAN.B_CONDITION:
             out_uncond = self.uncond_logits(x_code)
             return [output.view(-1), out_uncond.view(-1)]
-        else:
-            return [output.view(-1)]
+        return [output.view(-1)]
 
 
 # For 128 x 128 images
@@ -417,8 +414,7 @@ class D_NET128(nn.Module):
         if cfg.GAN.B_CONDITION:
             out_uncond = self.uncond_logits(x_code)
             return [output.view(-1), out_uncond.view(-1)]
-        else:
-            return [output.view(-1)]
+        return [output.view(-1)]
 
 
 # For 256 x 256 images
@@ -467,8 +463,7 @@ class D_NET256(nn.Module):
         if cfg.GAN.B_CONDITION:
             out_uncond = self.uncond_logits(x_code)
             return [output.view(-1), out_uncond.view(-1)]
-        else:
-            return [output.view(-1)]
+        return [output.view(-1)]
 
 
 # For 512 x 512 images: Recommended structure, not test yet
@@ -519,8 +514,7 @@ class D_NET512(nn.Module):
         if cfg.GAN.B_CONDITION:
             out_uncond = self.uncond_logits(x_code)
             return [output.view(-1), out_uncond.view(-1)]
-        else:
-            return [output.view(-1)]
+        return [output.view(-1)]
 
 
 # For 1024 x 1024 images: Recommended structure, not test yet
@@ -575,5 +569,5 @@ class D_NET1024(nn.Module):
         if cfg.GAN.B_CONDITION:
             out_uncond = self.uncond_logits(x_code)
             return [output.view(-1), out_uncond.view(-1)]
-        else:
-            return [output.view(-1)]
+        return [output.view(-1)]
+

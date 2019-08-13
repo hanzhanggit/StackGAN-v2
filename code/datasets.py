@@ -61,7 +61,7 @@ class ImageFolder(data.Dataset):
         root = os.path.join(root, split_dir)
         classes, class_to_idx = self.find_classes(root, custom_classes)
         imgs = self.make_dataset(classes, class_to_idx)
-        if len(imgs) == 0:
+        if imgs:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
 
@@ -83,13 +83,13 @@ class ImageFolder(data.Dataset):
             base_size = base_size * 2
         print('num_classes', self.num_classes)
 
-    def find_classes(self, dir, custom_classes):
+    def find_classes(self, directory, custom_classes):
         classes = []
 
-        for d in os.listdir(dir):
+        for d in os.listdir(directory):
             if os.path.isdir:
                 if custom_classes is None or d in custom_classes:
-                    classes.append(os.path.join(dir, d))
+                    classes.append(os.path.join(directory, d))
         print('Valid classes: ', len(classes), classes)
 
         classes.sort()
@@ -207,8 +207,7 @@ class TextDataset(data.Dataset):
         print('Total filenames: ', len(filenames), filenames[0])
         #
         filename_bbox = {img_file[:-4]: [] for img_file in filenames}
-        numImgs = len(filenames)
-        for i in range(numImgs):
+        for i, item in enumerate(filenames): # this is the range of the number of images
             # bbox = [x-left, y-top, width, height]
             bbox = df_bounding_boxes.iloc[i][1:].tolist()
 
@@ -242,7 +241,6 @@ class TextDataset(data.Dataset):
 
         with open(data_dir + embedding_filename, 'rb') as f:
             embeddings = pickle.load(f, encoding="bytes")
-            # embeddings = pickle.load(f, encoding="latin-1")
             embeddings = np.array(embeddings)
             # embedding_shape = [embeddings.shape[-1]]
             print('embeddings: ', embeddings.shape)
@@ -252,7 +250,6 @@ class TextDataset(data.Dataset):
         if os.path.isfile(data_dir + '/class_info.pickle'):
             with open(data_dir + '/class_info.pickle', 'rb') as f:
                 class_id = pickle.load(f, encoding="bytes")
-                # class_id = pickle.load(f, encoding="latin-1")
         else:
             class_id = np.arange(total_num)
         return class_id

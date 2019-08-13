@@ -18,9 +18,6 @@ dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
 sys.path.append(dir_path)
 
 
-
-
-
 # 19 classes --> 7 valid classes with 8,555 images
 DOG_LESS = ['n02084071', 'n01322604', 'n02112497', 'n02113335', 'n02111277',
             'n02084732', 'n02111129', 'n02103406', 'n02112826', 'n02111626',
@@ -146,9 +143,8 @@ if __name__ == "__main__":
         algo.evaluate(split_dir)
     end_t = time.time()
     print('Total time for training:', end_t - start_t)
-    ''' Running time comparison for 10epoch with batch_size 24 on birds dataset
-        T(1gpu) = 1.383 T(2gpus)
-            - gpu 2: 2426.228544 -> 4min/epoch
-            - gpu 2 & 3: 1754.12295008 -> 2.9min/epoch
-            - gpu 3: 2514.02744293
-    '''
+    # Running time comparison for 10epoch with batch_size 24 on birds dataset
+    #    T(1gpu) = 1.383 T(2gpus)
+    #        - gpu 2: 2426.228544 -> 4min/epoch
+    #        - gpu 2 & 3: 1754.12295008 -> 2.9min/epoch
+    #        - gpu 3: 2514.02744293

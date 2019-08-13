@@ -68,7 +68,7 @@ def _merge_a_into_b(a, b):
     options in b whenever they are also specified in a.
     """
     if type(a) is not edict:
-        return
+        raise TypeError('{} is not a valid edict type'.format(a))
 
     for k, v in a.items():
         # a must specify keys that are in b
@@ -81,17 +81,14 @@ def _merge_a_into_b(a, b):
             if isinstance(b[k], np.ndarray):
                 v = np.array(v, dtype=b[k].dtype)
             else:
-                raise ValueError(('Type mismatch ({} vs. {}) '
-                                  'for config key: {}').format(type(b[k]),
-                                                               type(v), k))
+                raise TypeError(('Type mismatch ({} vs. {}) for config key: {}'.format(type(b[k]), type(v), k)))
 
         # recursively merge dicts
         if type(v) is edict:
             try:
                 _merge_a_into_b(a[k], b[k])
             except:
-                print('Error under config key: {}'.format(k))
-                raise
+                raise KeyError('Error under config key: {}'.format(k))
         else:
             b[k] = v
 
