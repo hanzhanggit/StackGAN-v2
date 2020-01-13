@@ -19,7 +19,7 @@ python 3.6+
 Pytorch 1.1.0+
 
 In addition, please add the project folder to PYTHONPATH and `pip install` the following packages:
-- `tensorboard`
+- `tensorboardX`
 - `python-dateutil`
 - `easydict`
 - `pandas`
