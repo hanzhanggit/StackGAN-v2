@@ -11,15 +11,15 @@ Pytorch implementation for reproducing StackGAN_v2 results in the paper [StackGA
 
 <img src="examples/framework.jpg" width="900px" height="350px"/>
 
-
+Note: Code has been updated for Python3 usage. Thank you [David Stap](https://github.com/davidstap/AttnGAN) for your help upgrading the original StackGAN-v2 file. Also, sometimes during training my computer randomly shut down. I think was because the GPU was pulling in too much power, but be aware of this. 
 
 ### Dependencies
-python 2.7
+python 3.6+
 
-Pytorch
+Pytorch 1.1.0+
 
 In addition, please add the project folder to PYTHONPATH and `pip install` the following packages:
-- `tensorboard`
+- `tensorboardX`
 - `python-dateutil`
 - `easydict`
 - `pandas`
@@ -56,11 +56,11 @@ In addition, please add the project folder to PYTHONPATH and `pip install` the f
 
 
 **Pretrained Model**
-- [StackGAN-v2 for bird](https://drive.google.com/open?id=1s5Yf3nFiXx0lltMFOiJWB6s1LP24RcwH). Download and save it to `models/` (The [inception score](https://github.com/hanzhanggit/StackGAN-inception-model) for this Model is 4.04±0.05)
-- [StackGAN-v2 for dog](https://drive.google.com/open?id=1zcwYfvhsKqb8svQDecTbx_mdYy3TG3F0). Download and save it to `models/` (The [inception score](https://github.com/openai/improved-gan/tree/master/inception_score) for this Model is 9.55±0.11)
-- [StackGAN-v2 for cat](https://drive.google.com/open?id=1yPX62c-eCLCNxpziGX9qF_V6Verom3v9). Download and save it to `models/`
-- [StackGAN-v2 for bedroom](https://drive.google.com/open?id=1Kqowg0ZLZbN1ek5N-YqEw9TlZeI3XV-K). Download and save it to `models/`
-- [StackGAN-v2 for church](https://drive.google.com/open?id=13Pw4PZOkiAM5y_KoOwBzlXK9eQ2hHLfT). Download and save it to `models/`
+- [StackGAN-v2 for bird](). Download and save it to `models/` (The [inception score](https://github.com/hanzhanggit/StackGAN-inception-model) for this Model is 4.04±0.05)
+- [StackGAN-v2 for dog](). Download and save it to `models/` (The [inception score](https://github.com/openai/improved-gan/tree/master/inception_score) for this Model is 9.55±0.11)
+- [StackGAN-v2 for cat](). Download and save it to `models/`
+- [StackGAN-v2 for bedroom](). Download and save it to `models/`
+- [StackGAN-v2 for church](). Download and save it to `models/`
 
 
 

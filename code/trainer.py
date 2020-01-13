@@ -4,22 +4,23 @@ from six.moves import range
 import torch.backends.cudnn as cudnn
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.optim as optim
 import torchvision.utils as vutils
 import numpy as np
 import os
 import time
+
+from torch.autograd import Variable
 from PIL import Image, ImageFont, ImageDraw
 from copy import deepcopy
 
 from miscc.config import cfg
 from miscc.utils import mkdir_p
-
-from tensorboard import summary
-from tensorboard import FileWriter
-
 from model import G_NET, D_NET64, D_NET128, D_NET256, D_NET512, D_NET1024, INCEPTION_V3
+
+from tensorboardX import FileWriter, summary
+
+
 
 
 
@@ -56,12 +57,12 @@ def KL_loss(mu, logvar):
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.orthogonal(m.weight.data, 1.0)
+        nn.init.orthogonal_(m.weight.data, 1.0)
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
-        nn.init.orthogonal(m.weight.data, 1.0)
+        nn.init.orthogonal_(m.weight.data, 1.0)
         if m.bias is not None:
             m.bias.data.fill_(0.0)
 
@@ -83,8 +84,7 @@ def compute_inception_score(predictions, num_splits=1):
         istart = i * predictions.shape[0] // num_splits
         iend = (i + 1) * predictions.shape[0] // num_splits
         part = predictions[istart:iend, :]
-        kl = part * \
-            (np.log(part) - np.log(np.expand_dims(np.mean(part, 0), 0)))
+        kl = part * (np.log(part) - np.log(np.expand_dims(np.mean(part, 0), 0)))
         kl = np.mean(np.sum(kl, 1))
         scores.append(np.exp(kl))
     return np.mean(scores), np.std(scores)
@@ -161,58 +161,45 @@ def define_optimizers(netG, netsD):
     optimizersD = []
     num_Ds = len(netsD)
     for i in range(num_Ds):
-        opt = optim.Adam(netsD[i].parameters(),
-                         lr=cfg.TRAIN.DISCRIMINATOR_LR,
-                         betas=(0.5, 0.999))
+        opt = optim.Adam(netsD[i].parameters(), lr=cfg.TRAIN.DISCRIMINATOR_LR, betas=(0.5, 0.999))
         optimizersD.append(opt)
 
     # G_opt_paras = []
     # for p in netG.parameters():
     #     if p.requires_grad:
     #         G_opt_paras.append(p)
-    optimizerG = optim.Adam(netG.parameters(),
-                            lr=cfg.TRAIN.GENERATOR_LR,
-                            betas=(0.5, 0.999))
+    optimizerG = optim.Adam(netG.parameters(), lr=cfg.TRAIN.GENERATOR_LR, betas=(0.5, 0.999))
     return optimizerG, optimizersD
 
 
 def save_model(netG, avg_param_G, netsD, epoch, model_dir):
     load_params(netG, avg_param_G)
-    torch.save(
-        netG.state_dict(),
-        '%s/netG_%d.pth' % (model_dir, epoch))
+    torch.save(netG.state_dict(), '%s/netG_%d.pth' % (model_dir, epoch))
     for i in range(len(netsD)):
         netD = netsD[i]
-        torch.save(
-            netD.state_dict(),
-            '%s/netD%d.pth' % (model_dir, i))
+        torch.save(netD.state_dict(), '%s/netD%d.pth' % (model_dir, i))
     print('Save G/Ds models.')
 
 
-def save_img_results(imgs_tcpu, fake_imgs, num_imgs,
-                     count, image_dir, summary_writer):
+def save_img_results(imgs_tcpu, fake_imgs, num_imgs, count, image_dir, summary_writer):
     num = cfg.TRAIN.VIS_COUNT
 
     # The range of real_img (i.e., self.imgs_tcpu[i][0:num])
     # is changed to [0, 1] by function vutils.save_image
     real_img = imgs_tcpu[-1][0:num]
-    vutils.save_image(
-        real_img, '%s/real_samples.png' % (image_dir),
-        normalize=True)
+    vutils.save_image(real_img, '%s/real_samples.png' % (image_dir), normalize=True)
     real_img_set = vutils.make_grid(real_img).numpy()
     real_img_set = np.transpose(real_img_set, (1, 2, 0))
     real_img_set = real_img_set * 255
     real_img_set = real_img_set.astype(np.uint8)
-    sup_real_img = summary.image('real_img', real_img_set)
+    sup_real_img = summary.image('real_img', real_img_set, dataformats='HWC')
     summary_writer.add_summary(sup_real_img, count)
 
     for i in range(num_imgs):
         fake_img = fake_imgs[i][0:num]
         # The range of fake_img.data (i.e., self.fake_imgs[i][0:num])
         # is still [-1. 1]...
-        vutils.save_image(
-            fake_img.data, '%s/count_%09d_fake_samples%d.png' %
-            (image_dir, count, i), normalize=True)
+        vutils.save_image(fake_img.data, '%s/count_%09d_fake_samples%d.png' % (image_dir, count, i), normalize=True)
 
         fake_img_set = vutils.make_grid(fake_img.data).cpu().numpy()
 
@@ -220,7 +207,7 @@ def save_img_results(imgs_tcpu, fake_imgs, num_imgs,
         fake_img_set = (fake_img_set + 1) * 255 / 2
         fake_img_set = fake_img_set.astype(np.uint8)
 
-        sup_fake_img = summary.image('fake_img%d' % i, fake_img_set)
+        sup_fake_img = summary.image('fake_img%d' % i, fake_img_set, dataformats='HWC')
         summary_writer.add_summary(sup_fake_img, count)
         summary_writer.flush()
 
@@ -236,6 +223,7 @@ class GANTrainer(object):
             mkdir_p(self.image_dir)
             mkdir_p(self.log_dir)
             self.summary_writer = FileWriter(self.log_dir)
+
 
         s_gpus = cfg.GPU_ID.split(',')
         self.gpus = [int(ix) for ix in s_gpus]
@@ -287,7 +275,7 @@ class GANTrainer(object):
         optD.step()
         # log
         if flag == 0:
-            summary_D = summary.scalar('D_loss%d' % idx, errD.data[0])
+            summary_D = summary.scalar('D_loss%d' % idx, errD.item())
             self.summary_writer.add_summary(summary_D, count)
         return errD
 
@@ -306,37 +294,33 @@ class GANTrainer(object):
             # errG = self.stage_coeff[i] * errG
             errG_total = errG_total + errG
             if flag == 0:
-                summary_G = summary.scalar('G_loss%d' % i, errG.data[0])
+                summary_G = summary.scalar('G_loss%d' % i, errG.item())
                 self.summary_writer.add_summary(summary_G, count)
 
         # Compute color preserve losses
         if cfg.TRAIN.COEFF.COLOR_LOSS > 0:
             if self.num_Ds > 1:
                 mu1, covariance1 = compute_mean_covariance(self.fake_imgs[-1])
-                mu2, covariance2 = \
-                    compute_mean_covariance(self.fake_imgs[-2].detach())
+                mu2, covariance2 = compute_mean_covariance(self.fake_imgs[-2].detach())
                 like_mu2 = cfg.TRAIN.COEFF.COLOR_LOSS * nn.MSELoss()(mu1, mu2)
-                like_cov2 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * \
-                    nn.MSELoss()(covariance1, covariance2)
+                like_cov2 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * nn.MSELoss()(covariance1, covariance2)
                 errG_total = errG_total + like_mu2 + like_cov2
             if self.num_Ds > 2:
                 mu1, covariance1 = compute_mean_covariance(self.fake_imgs[-2])
-                mu2, covariance2 = \
-                    compute_mean_covariance(self.fake_imgs[-3].detach())
+                mu2, covariance2 = compute_mean_covariance(self.fake_imgs[-3].detach())
                 like_mu1 = cfg.TRAIN.COEFF.COLOR_LOSS * nn.MSELoss()(mu1, mu2)
-                like_cov1 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * \
-                    nn.MSELoss()(covariance1, covariance2)
+                like_cov1 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * nn.MSELoss()(covariance1, covariance2)
                 errG_total = errG_total + like_mu1 + like_cov1
 
             if flag == 0:
-                sum_mu = summary.scalar('G_like_mu2', like_mu2.data[0])
+                sum_mu = summary.scalar('G_like_mu2', like_mu2.item())
                 self.summary_writer.add_summary(sum_mu, count)
-                sum_cov = summary.scalar('G_like_cov2', like_cov2.data[0])
+                sum_cov = summary.scalar('G_like_cov2', like_cov2.item())
                 self.summary_writer.add_summary(sum_cov, count)
                 if self.num_Ds > 2:
-                    sum_mu = summary.scalar('G_like_mu1', like_mu1.data[0])
+                    sum_mu = summary.scalar('G_like_mu1', like_mu1.item())
                     self.summary_writer.add_summary(sum_mu, count)
-                    sum_cov = summary.scalar('G_like_cov1', like_cov1.data[0])
+                    sum_cov = summary.scalar('G_like_cov1', like_cov1.item())
                     self.summary_writer.add_summary(sum_cov, count)
 
         errG_total.backward()
@@ -344,23 +328,18 @@ class GANTrainer(object):
         return errG_total
 
     def train(self):
-        self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, start_count = load_network(self.gpus)
+        self.netG, self.netsD, self.num_Ds, self.inception_model, start_count = load_network(self.gpus)
         avg_param_G = copy_G_params(self.netG)
 
-        self.optimizerG, self.optimizersD = \
-            define_optimizers(self.netG, self.netsD)
+        self.optimizerG, self.optimizersD = define_optimizers(self.netG, self.netsD)
 
         self.criterion = nn.BCELoss()
 
-        self.real_labels = \
-            Variable(torch.FloatTensor(self.batch_size).fill_(1))
-        self.fake_labels = \
-            Variable(torch.FloatTensor(self.batch_size).fill_(0))
+        self.real_labels = Variable(torch.FloatTensor(self.batch_size).fill_(1))
+        self.fake_labels = Variable(torch.FloatTensor(self.batch_size).fill_(0))
         nz = cfg.GAN.Z_DIM
         noise = Variable(torch.FloatTensor(self.batch_size, nz))
-        fixed_noise = \
-            Variable(torch.FloatTensor(self.batch_size, nz).normal_(0, 1))
+        fixed_noise = Variable(torch.FloatTensor(self.batch_size, nz).normal_(0, 1))
 
         if cfg.CUDA:
             self.criterion.cuda()
@@ -406,14 +385,14 @@ class GANTrainer(object):
                 predictions.append(pred.data.cpu().numpy())
 
                 if count % 100 == 0:
-                    summary_D = summary.scalar('D_loss', errD_total.data[0])
-                    summary_G = summary.scalar('G_loss', errG_total.data[0])
+                    summary_D = summary.scalar('D_loss', errD_total.item())
+                    summary_G = summary.scalar('G_loss', errG_total.item())
                     self.summary_writer.add_summary(summary_D, count)
                     self.summary_writer.add_summary(summary_G, count)
                 if step == 0:
                     print('''[%d/%d][%d/%d] Loss_D: %.2f Loss_G: %.2f'''
                            % (epoch, self.max_epoch, step, self.num_batches,
-                              errD_total.data[0], errG_total.data[0]))
+                              errD_total.item(), errG_total.item()))
                 count = count + 1
 
                 if count % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:
@@ -437,8 +416,7 @@ class GANTrainer(object):
                         m_incep = summary.scalar('Inception_mean', mean)
                         self.summary_writer.add_summary(m_incep, count)
                         #
-                        mean_nlpp, std_nlpp = \
-                            negative_log_posterior_probability(predictions, 10)
+                        mean_nlpp, std_nlpp = negative_log_posterior_probability(predictions, 10)
                         m_nlpp = summary.scalar('NLPP_mean', mean_nlpp)
                         self.summary_writer.add_summary(m_nlpp, count)
                         #
@@ -477,9 +455,7 @@ class GANTrainer(object):
             netG = torch.nn.DataParallel(netG, device_ids=self.gpus)
             print(netG)
             # state_dict = torch.load(cfg.TRAIN.NET_G)
-            state_dict = \
-                torch.load(cfg.TRAIN.NET_G,
-                           map_location=lambda storage, loc: storage)
+            state_dict = torch.load(cfg.TRAIN.NET_G, map_location=lambda storage, loc: storage)
             netG.load_state_dict(state_dict)
             print('Load ', cfg.TRAIN.NET_G)
 
@@ -507,7 +483,7 @@ class GANTrainer(object):
             netG.eval()
             num_batches = int(cfg.TEST.SAMPLE_NUM / self.batch_size)
             cnt = 0
-            for step in xrange(num_batches):
+            for step in range(num_batches):
                 noise.data.normal_(0, 1)
                 fake_imgs, _, _ = netG(noise)
                 if cfg.TEST.B_EXAMPLE:
@@ -584,12 +560,9 @@ class condGANTrainer(object):
         errD_wrong = criterion(wrong_logits[0], fake_labels)
         errD_fake = criterion(fake_logits[0], fake_labels)
         if len(real_logits) > 1 and cfg.TRAIN.COEFF.UNCOND_LOSS > 0:
-            errD_real_uncond = cfg.TRAIN.COEFF.UNCOND_LOSS * \
-                criterion(real_logits[1], real_labels)
-            errD_wrong_uncond = cfg.TRAIN.COEFF.UNCOND_LOSS * \
-                criterion(wrong_logits[1], real_labels)
-            errD_fake_uncond = cfg.TRAIN.COEFF.UNCOND_LOSS * \
-                criterion(fake_logits[1], fake_labels)
+            errD_real_uncond = cfg.TRAIN.COEFF.UNCOND_LOSS * criterion(real_logits[1], real_labels)
+            errD_wrong_uncond = cfg.TRAIN.COEFF.UNCOND_LOSS * criterion(wrong_logits[1], real_labels)
+            errD_fake_uncond = cfg.TRAIN.COEFF.UNCOND_LOSS * criterion(fake_logits[1], fake_labels)
             #
             errD_real = errD_real + errD_real_uncond
             errD_wrong = errD_wrong + errD_wrong_uncond
@@ -604,7 +577,7 @@ class condGANTrainer(object):
         optD.step()
         # log
         if flag == 0:
-            summary_D = summary.scalar('D_loss%d' % idx, errD.data[0])
+            summary_D = summary.scalar('D_loss%d' % idx, errD.item())
             self.summary_writer.add_summary(summary_D, count)
         return errD
 
@@ -619,41 +592,38 @@ class condGANTrainer(object):
             outputs = self.netsD[i](self.fake_imgs[i], mu)
             errG = criterion(outputs[0], real_labels)
             if len(outputs) > 1 and cfg.TRAIN.COEFF.UNCOND_LOSS > 0:
-                errG_patch = cfg.TRAIN.COEFF.UNCOND_LOSS *\
-                    criterion(outputs[1], real_labels)
+                errG_patch = cfg.TRAIN.COEFF.UNCOND_LOSS * criterion(outputs[1], real_labels)
                 errG = errG + errG_patch
             errG_total = errG_total + errG
             if flag == 0:
-                summary_D = summary.scalar('G_loss%d' % i, errG.data[0])
+                summary_D = summary.scalar('G_loss%d' % i, errG.item())
                 self.summary_writer.add_summary(summary_D, count)
 
         # Compute color consistency losses
         if cfg.TRAIN.COEFF.COLOR_LOSS > 0:
             if self.num_Ds > 1:
                 mu1, covariance1 = compute_mean_covariance(self.fake_imgs[-1])
-                mu2, covariance2 = \
-                    compute_mean_covariance(self.fake_imgs[-2].detach())
+                mu2, covariance2 = compute_mean_covariance(self.fake_imgs[-2].detach())
                 like_mu2 = cfg.TRAIN.COEFF.COLOR_LOSS * nn.MSELoss()(mu1, mu2)
-                like_cov2 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * \
-                    nn.MSELoss()(covariance1, covariance2)
+                like_cov2 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * nn.MSELoss()(covariance1, covariance2)
                 errG_total = errG_total + like_mu2 + like_cov2
                 if flag == 0:
-                    sum_mu = summary.scalar('G_like_mu2', like_mu2.data[0])
-                    self.summary_writer.add_summary(sum_mu, count)
-                    sum_cov = summary.scalar('G_like_cov2', like_cov2.data[0])
-                    self.summary_writer.add_summary(sum_cov, count)
+                    sum_mu = summary.scalar('G_like_mu2', like_mu2.item())
+                    self.summary_writer.add_summary(sum_mu, global_step=count)
+
+                    sum_cov = summary.scalar('G_like_cov2', like_cov2.item())
+                    self.summary_writer.add_summary(sum_cov, global_step=count)
             if self.num_Ds > 2:
                 mu1, covariance1 = compute_mean_covariance(self.fake_imgs[-2])
-                mu2, covariance2 = \
-                    compute_mean_covariance(self.fake_imgs[-3].detach())
+                mu2, covariance2 = compute_mean_covariance(self.fake_imgs[-3].detach())
                 like_mu1 = cfg.TRAIN.COEFF.COLOR_LOSS * nn.MSELoss()(mu1, mu2)
-                like_cov1 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * \
-                    nn.MSELoss()(covariance1, covariance2)
+                like_cov1 = cfg.TRAIN.COEFF.COLOR_LOSS * 5 * nn.MSELoss()(covariance1, covariance2)
                 errG_total = errG_total + like_mu1 + like_cov1
                 if flag == 0:
-                    sum_mu = summary.scalar('G_like_mu1', like_mu1.data[0])
+                    sum_mu = summary.scalar('G_like_mu1', like_mu1.item())
                     self.summary_writer.add_summary(sum_mu, count)
-                    sum_cov = summary.scalar('G_like_cov1', like_cov1.data[0])
+
+                    sum_cov = summary.scalar('G_like_cov1', like_cov1.item())
                     self.summary_writer.add_summary(sum_cov, count)
 
         kl_loss = KL_loss(mu, logvar) * cfg.TRAIN.COEFF.KL
@@ -663,27 +633,22 @@ class condGANTrainer(object):
         return kl_loss, errG_total
 
     def train(self):
-        self.netG, self.netsD, self.num_Ds,\
-            self.inception_model, start_count = load_network(self.gpus)
+        self.netG, self.netsD, self.num_Ds, self.inception_model, start_count = load_network(self.gpus)
         avg_param_G = copy_G_params(self.netG)
 
-        self.optimizerG, self.optimizersD = \
-            define_optimizers(self.netG, self.netsD)
+        self.optimizerG, self.optimizersD = define_optimizers(self.netG, self.netsD)
 
         self.criterion = nn.BCELoss()
 
-        self.real_labels = \
-            Variable(torch.FloatTensor(self.batch_size).fill_(1))
-        self.fake_labels = \
-            Variable(torch.FloatTensor(self.batch_size).fill_(0))
+        self.real_labels = Variable(torch.FloatTensor(self.batch_size).fill_(1))
+        self.fake_labels = Variable(torch.FloatTensor(self.batch_size).fill_(0))
 
         self.gradient_one = torch.FloatTensor([1.0])
         self.gradient_half = torch.FloatTensor([0.5])
 
         nz = cfg.GAN.Z_DIM
         noise = Variable(torch.FloatTensor(self.batch_size, nz))
-        fixed_noise = \
-            Variable(torch.FloatTensor(self.batch_size, nz).normal_(0, 1))
+        fixed_noise = Variable(torch.FloatTensor(self.batch_size, nz).normal_(0, 1))
 
         if cfg.CUDA:
             self.criterion.cuda()
@@ -703,15 +668,13 @@ class condGANTrainer(object):
                 #######################################################
                 # (0) Prepare training data
                 ######################################################
-                self.imgs_tcpu, self.real_imgs, self.wrong_imgs, \
-                    self.txt_embedding = self.prepare_data(data)
+                self.imgs_tcpu, self.real_imgs, self.wrong_imgs, self.txt_embedding = self.prepare_data(data)
 
                 #######################################################
                 # (1) Generate fake images
                 ######################################################
                 noise.data.normal_(0, 1)
-                self.fake_imgs, self.mu, self.logvar = \
-                    self.netG(noise, self.txt_embedding)
+                self.fake_imgs, self.mu, self.logvar = self.netG(noise, self.txt_embedding)
 
                 #######################################################
                 # (2) Update D network
@@ -733,9 +696,9 @@ class condGANTrainer(object):
                 predictions.append(pred.data.cpu().numpy())
 
                 if count % 100 == 0:
-                    summary_D = summary.scalar('D_loss', errD_total.data[0])
-                    summary_G = summary.scalar('G_loss', errG_total.data[0])
-                    summary_KL = summary.scalar('KL_loss', kl_loss.data[0])
+                    summary_D = summary.scalar('D_loss', errD_total.item())
+                    summary_G = summary.scalar('G_loss', errG_total.item())
+                    summary_KL = summary.scalar('KL_loss', kl_loss.item())
                     self.summary_writer.add_summary(summary_D, count)
                     self.summary_writer.add_summary(summary_G, count)
                     self.summary_writer.add_summary(summary_KL, count)
@@ -748,10 +711,9 @@ class condGANTrainer(object):
                     backup_para = copy_G_params(self.netG)
                     load_params(self.netG, avg_param_G)
                     #
-                    self.fake_imgs, _, _ = \
-                        self.netG(fixed_noise, self.txt_embedding)
-                    save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds,
-                                     count, self.image_dir, self.summary_writer)
+                    self.fake_imgs, _, _ = self.netG(fixed_noise, self.txt_embedding)
+                    save_img_results(self.imgs_tcpu, self.fake_imgs, self.num_Ds, count, self.image_dir,
+                                     self.summary_writer)
                     #
                     load_params(self.netG, backup_para)
 
@@ -763,8 +725,7 @@ class condGANTrainer(object):
                         m_incep = summary.scalar('Inception_mean', mean)
                         self.summary_writer.add_summary(m_incep, count)
                         #
-                        mean_nlpp, std_nlpp = \
-                            negative_log_posterior_probability(predictions, 10)
+                        mean_nlpp, std_nlpp = negative_log_posterior_probability(predictions, 10)
                         m_nlpp = summary.scalar('NLPP_mean', mean_nlpp)
                         self.summary_writer.add_summary(m_nlpp, count)
                         #
@@ -775,19 +736,17 @@ class condGANTrainer(object):
                          Loss_D: %.2f Loss_G: %.2f Loss_KL: %.2f Time: %.2fs
                       '''  # D(real): %.4f D(wrong):%.4f  D(fake) %.4f
                   % (epoch, self.max_epoch, self.num_batches,
-                     errD_total.data[0], errG_total.data[0],
-                     kl_loss.data[0], end_t - start_t))
+                     errD_total.item(), errG_total.item(),
+                     kl_loss.item(), end_t - start_t))
 
         save_model(self.netG, avg_param_G, self.netsD, count, self.model_dir)
         self.summary_writer.close()
 
-    def save_superimages(self, images_list, filenames,
-                         save_dir, split_dir, imsize):
+    def save_superimages(self, images_list, filenames, save_dir, split_dir, imsize):
         batch_size = images_list[0].size(0)
         num_sentences = len(images_list)
         for i in range(batch_size):
-            s_tmp = '%s/super/%s/%s' %\
-                (save_dir, split_dir, filenames[i])
+            s_tmp = '%s/super/%s/%s' % (save_dir, split_dir, filenames[i])
             folder = s_tmp[:s_tmp.rfind('/')]
             if not os.path.isdir(folder):
                 print('Make a new folder: ', folder)
@@ -805,11 +764,9 @@ class condGANTrainer(object):
             super_img = torch.cat(super_img, 0)
             vutils.save_image(super_img, savename, nrow=10, normalize=True)
 
-    def save_singleimages(self, images, filenames,
-                          save_dir, split_dir, sentenceID, imsize):
+    def save_singleimages(self, images, filenames, save_dir, split_dir, sentenceID, imsize):
         for i in range(images.size(0)):
-            s_tmp = '%s/single_samples/%s/%s' %\
-                (save_dir, split_dir, filenames[i])
+            s_tmp = '%s/single_samples/%s/%s' % (save_dir, split_dir, filenames[i])
             folder = s_tmp[:s_tmp.rfind('/')]
             if not os.path.isdir(folder):
                 print('Make a new folder: ', folder)
@@ -834,9 +791,7 @@ class condGANTrainer(object):
             netG = torch.nn.DataParallel(netG, device_ids=self.gpus)
             print(netG)
             # state_dict = torch.load(cfg.TRAIN.NET_G)
-            state_dict = \
-                torch.load(cfg.TRAIN.NET_G,
-                           map_location=lambda storage, loc: storage)
+            state_dict = torch.load(cfg.TRAIN.NET_G, map_location=lambda storage, loc: storage)
             netG.load_state_dict(state_dict)
             print('Load ', cfg.TRAIN.NET_G)
 
@@ -877,8 +832,7 @@ class condGANTrainer(object):
                         # fake_img_list.append(fake_imgs[1].data.cpu())
                         fake_img_list.append(fake_imgs[2].data.cpu())
                     else:
-                        self.save_singleimages(fake_imgs[-1], filenames,
-                                               save_dir, split_dir, i, 256)
+                        self.save_singleimages(fake_imgs[-1], filenames, save_dir, split_dir, i, 256)
                         # self.save_singleimages(fake_imgs[-2], filenames,
                         #                        save_dir, split_dir, i, 128)
                         # self.save_singleimages(fake_imgs[-3], filenames,
@@ -889,5 +843,4 @@ class condGANTrainer(object):
                     #                       save_dir, split_dir, 64)
                     # self.save_superimages(fake_img_list, filenames,
                     #                       save_dir, split_dir, 128)
-                    self.save_superimages(fake_img_list, filenames,
-                                          save_dir, split_dir, 256)
+                    self.save_superimages(fake_img_list, filenames, save_dir, split_dir, 256)

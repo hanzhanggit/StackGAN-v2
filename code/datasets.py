@@ -3,27 +3,18 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-
-import torch.utils.data as data
 import torchvision.transforms as transforms
-from PIL import Image
-import PIL
+import torch.utils.data as data
 import os
-import os.path
-import pickle
 import random
 import numpy as np
 import pandas as pd
-from miscc.config import cfg
-
-import torch.utils.data as data
-from PIL import Image
-import os
-import os.path
 import six
-import string
 import sys
-import torch
+
+from miscc.config import cfg
+from PIL import Image
+
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
@@ -37,8 +28,7 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
-def get_imgs(img_path, imsize, bbox=None,
-             transform=None, normalize=None):
+def get_imgs(img_path, imsize, bbox=None, transform=None, normalize=None):
     img = Image.open(img_path).convert('RGB')
     width, height = img.size
     if bbox is not None:
@@ -57,7 +47,7 @@ def get_imgs(img_path, imsize, bbox=None,
     ret = []
     for i in range(cfg.TREE.BRANCH_NUM):
         if i < (cfg.TREE.BRANCH_NUM - 1):
-            re_img = transforms.Scale(imsize[i])(img)
+            re_img = transforms.Resize(imsize[i])(img)
         else:
             re_img = img
         ret.append(normalize(re_img))
@@ -71,7 +61,7 @@ class ImageFolder(data.Dataset):
         root = os.path.join(root, split_dir)
         classes, class_to_idx = self.find_classes(root, custom_classes)
         imgs = self.make_dataset(classes, class_to_idx)
-        if len(imgs) == 0:
+        if imgs:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
 
@@ -93,13 +83,13 @@ class ImageFolder(data.Dataset):
             base_size = base_size * 2
         print('num_classes', self.num_classes)
 
-    def find_classes(self, dir, custom_classes):
+    def find_classes(self, directory, custom_classes):
         classes = []
 
-        for d in os.listdir(dir):
+        for d in os.listdir(directory):
             if os.path.isdir:
                 if custom_classes is None or d in custom_classes:
-                    classes.append(os.path.join(dir, d))
+                    classes.append(os.path.join(directory, d))
         print('Valid classes: ', len(classes), classes)
 
         classes.sort()
@@ -120,10 +110,7 @@ class ImageFolder(data.Dataset):
 
     def __getitem__(self, index):
         path, target = self.imgs[index]
-        imgs_list = get_imgs(path, self.imsize,
-                             transform=self.transform,
-                             normalize=self.norm)
-
+        imgs_list = get_imgs(path, self.imsize, transform=self.transform, normalize=self.norm)
         return imgs_list
 
     def __len__(self):
@@ -131,8 +118,7 @@ class ImageFolder(data.Dataset):
 
 
 class LSUNClass(data.Dataset):
-    def __init__(self, db_path, base_size=64,
-                 transform=None, target_transform=None):
+    def __init__(self, db_path, base_size=64, transform=None, target_transform=None):
         import lmdb
         self.db_path = db_path
         self.env = lmdb.open(db_path, max_readers=1, readonly=True, lock=False,
@@ -168,9 +154,7 @@ class LSUNClass(data.Dataset):
         buf = six.BytesIO()
         buf.write(imgbuf)
         buf.seek(0)
-        imgs = get_imgs(buf, self.imsize,
-                        transform=self.transform,
-                        normalize=self.norm)
+        imgs = get_imgs(buf, self.imsize, transform=self.transform, normalize=self.norm)
         return imgs
 
     def __len__(self):
@@ -215,19 +199,15 @@ class TextDataset(data.Dataset):
     def load_bbox(self):
         data_dir = self.data_dir
         bbox_path = os.path.join(data_dir, 'CUB_200_2011/bounding_boxes.txt')
-        df_bounding_boxes = pd.read_csv(bbox_path,
-                                        delim_whitespace=True,
-                                        header=None).astype(int)
+        df_bounding_boxes = pd.read_csv(bbox_path, delim_whitespace=True, header=None).astype(int)
         #
         filepath = os.path.join(data_dir, 'CUB_200_2011/images.txt')
-        df_filenames = \
-            pd.read_csv(filepath, delim_whitespace=True, header=None)
+        df_filenames = pd.read_csv(filepath, delim_whitespace=True, header=None)
         filenames = df_filenames[1].tolist()
         print('Total filenames: ', len(filenames), filenames[0])
         #
         filename_bbox = {img_file[:-4]: [] for img_file in filenames}
-        numImgs = len(filenames)
-        for i in xrange(0, numImgs):
+        for i, item in enumerate(filenames): # this is the range of the number of images
             # bbox = [x-left, y-top, width, height]
             bbox = df_bounding_boxes.iloc[i][1:].tolist()
 
@@ -240,14 +220,13 @@ class TextDataset(data.Dataset):
         def load_captions(caption_name):  # self,
             cap_path = caption_name
             with open(cap_path, "r") as f:
-                captions = f.read().decode('utf8').split('\n')
-            captions = [cap.replace("\ufffd\ufffd", " ")
-                        for cap in captions if len(cap) > 0]
+                captions = f.read().split('\n')
+            captions = [cap.replace("\ufffd\ufffd", " ") for cap in captions if len(cap) > 0]
             return captions
 
         caption_dict = {}
         for key in self.filenames:
-            caption_name = '%s/text/%s.txt' % (self.data_dir, key)
+            caption_name = '%s/text_c10/%s.txt' % (self.data_dir, key)
             captions = load_captions(caption_name)
             caption_dict[key] = captions
         return caption_dict
@@ -261,7 +240,7 @@ class TextDataset(data.Dataset):
             embedding_filename = '/skip-thought-embeddings.pickle'
 
         with open(data_dir + embedding_filename, 'rb') as f:
-            embeddings = pickle.load(f)
+            embeddings = pickle.load(f, encoding="bytes")
             embeddings = np.array(embeddings)
             # embedding_shape = [embeddings.shape[-1]]
             print('embeddings: ', embeddings.shape)
@@ -270,7 +249,7 @@ class TextDataset(data.Dataset):
     def load_class_id(self, data_dir, total_num):
         if os.path.isfile(data_dir + '/class_info.pickle'):
             with open(data_dir + '/class_info.pickle', 'rb') as f:
-                class_id = pickle.load(f)
+                class_id = pickle.load(f, encoding="bytes")
         else:
             class_id = np.arange(total_num)
         return class_id
@@ -293,21 +272,18 @@ class TextDataset(data.Dataset):
         # captions = self.captions[key]
         embeddings = self.embeddings[index, :, :]
         img_name = '%s/images/%s.jpg' % (data_dir, key)
-        imgs = get_imgs(img_name, self.imsize,
-                        bbox, self.transform, normalize=self.norm)
+        imgs = get_imgs(img_name, self.imsize, bbox, self.transform, normalize=self.norm)
 
         wrong_ix = random.randint(0, len(self.filenames) - 1)
-        if(self.class_id[index] == self.class_id[wrong_ix]):
+        if self.class_id[index] == self.class_id[wrong_ix]:
             wrong_ix = random.randint(0, len(self.filenames) - 1)
         wrong_key = self.filenames[wrong_ix]
         if self.bbox is not None:
             wrong_bbox = self.bbox[wrong_key]
         else:
             wrong_bbox = None
-        wrong_img_name = '%s/images/%s.jpg' % \
-            (data_dir, wrong_key)
-        wrong_imgs = get_imgs(wrong_img_name, self.imsize,
-                              wrong_bbox, self.transform, normalize=self.norm)
+        wrong_img_name = '%s/images/%s.jpg' % (data_dir, wrong_key)
+        wrong_imgs = get_imgs(wrong_img_name, self.imsize, wrong_bbox, self.transform, normalize=self.norm)
 
         embedding_ix = random.randint(0, embeddings.shape[0] - 1)
         embedding = embeddings[embedding_ix, :]
@@ -327,8 +303,7 @@ class TextDataset(data.Dataset):
         # captions = self.captions[key]
         embeddings = self.embeddings[index, :, :]
         img_name = '%s/images/%s.jpg' % (data_dir, key)
-        imgs = get_imgs(img_name, self.imsize,
-                        bbox, self.transform, normalize=self.norm)
+        imgs = get_imgs(img_name, self.imsize, bbox, self.transform, normalize=self.norm)
 
         if self.target_transform is not None:
             embeddings = self.target_transform(embeddings)
